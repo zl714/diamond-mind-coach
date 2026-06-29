@@ -351,6 +351,55 @@
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Drill / Lesson (coaching-session workflow) — NEW entities.
+  // ---------------------------------------------------------------------------
+  // Categories a Drill can belong to (drill library filter + grouping).
+  const DRILL_CATEGORIES = ['Hitting', 'Pitching', 'Fielding', 'Baserunning', 'Strength', 'Mobility'];
+
+  // A reusable, coach-managed drill. The DrillLibrary is just the `drills`
+  // collection. Drills are CLONED (by id reference) into a Lesson's drillIds.
+  function Drill(d) {
+    d = d || {};
+    const cat = DRILL_CATEGORIES.indexOf(d.category) >= 0 ? d.category : 'Hitting';
+    return {
+      id: str(d.id, id('drl')),
+      name: str(d.name, 'New Drill'),
+      category: cat,
+      defaultNotes: str(d.defaultNotes, ''),
+      createdAt: str(d.createdAt, nowISO()),
+      updatedAt: str(d.updatedAt, nowISO())
+    };
+  }
+
+  // A coaching session for one player on one date. `drillIds` is an ORDERED list
+  // of Drill ids (the session board's columns persist their order here).
+  // `notes` is the rich session note, carried by this STABLE lesson id — never a
+  // board position — so it follows the lesson regardless of drag-drop reordering.
+  // `quickStats` is a { metricKey: value } map of quick-logged numbers.
+  function Lesson(d) {
+    d = d || {};
+    const drillIds = Array.isArray(d.drillIds) ? d.drillIds.map(String) : [];
+    let quickStats = {};
+    if (d.quickStats && typeof d.quickStats === 'object') {
+      Object.keys(d.quickStats).forEach(function (k) {
+        const v = Number(d.quickStats[k]);
+        if (Number.isFinite(v)) quickStats[k] = v;
+      });
+    }
+    return {
+      id: str(d.id, id('les')),
+      playerId: str(d.playerId, ''),
+      date: str(d.date, CT.todayISO()),
+      drillIds: drillIds,
+      notes: str(d.notes, ''),
+      quickStats: quickStats,
+      ratingDelta: d.ratingDelta == null ? null : num(d.ratingDelta, null),
+      createdAt: str(d.createdAt, nowISO()),
+      updatedAt: str(d.updatedAt, nowISO())
+    };
+  }
+
   function Benchmark(d) {
     d = d || {};
     return {
@@ -436,6 +485,7 @@
     AGGREGATIONS: AGGREGATIONS,
     DEVICES: DEVICES,
     CONFIDENCE: CONFIDENCE,
+    DRILL_CATEGORIES: DRILL_CATEGORIES,
     METRIC_CATALOG: METRIC_CATALOG,
     METRIC_BY_KEY: METRIC_BY_KEY,
     metric: metric,
@@ -459,6 +509,8 @@
     Program: Program,
     ProgramAssignment: ProgramAssignment,
     ProgramSession: ProgramSession,
+    Drill: Drill,
+    Lesson: Lesson,
     Benchmark: Benchmark,
     Team: Team,
     Season: Season,

@@ -13,6 +13,25 @@
   const byId = {};
   let booted = false;
 
+  // Lucide icon name per view id (sidebar nav + mobile tab bar). Unknown ids
+  // fall back to a generic glyph so a newly-added view still renders an icon.
+  const NAV_ICONS = {
+    roster: 'users',
+    drills: 'layers',
+    lessons: 'clipboard-list',
+    dashboard: 'layout-dashboard',
+    assessment: 'gauge',
+    games: 'list',
+    season: 'trending-up',
+    armsafety: 'shield',
+    programs: 'dumbbell',
+    alerts: 'bell'
+  };
+  function navIcon(id) { return NAV_ICONS[id] || 'circle'; }
+
+  // Re-render any <i data-lucide> placeholders (nav, view content, empty states).
+  function paintIcons() { try { if (window.lucide) window.lucide.createIcons(); } catch (e) {} }
+
   /**
    * registerView(id, { label, render(rootEl, ctx) })
    * Adds a nav tab and makes the view routable at #/<id> (and #/<id>/<param>).
@@ -56,8 +75,11 @@
     const current = parseHash().id;
     nav.innerHTML = views.map(function (v) {
       const active = v.id === current ? ' active' : '';
-      return '<a class="tab' + active + '" href="#/' + v.id + '" data-view="' + v.id + '">' + CT.escapeHtml(v.label) + '</a>';
+      return '<a class="tab' + active + '" href="#/' + v.id + '" data-view="' + v.id + '">' +
+        '<i data-lucide="' + navIcon(v.id) + '"></i>' +
+        '<span>' + CT.escapeHtml(v.label) + '</span></a>';
     }).join('');
+    paintIcons();
   }
 
   function refreshBadge() {
@@ -77,8 +99,9 @@
     refreshBadge();
 
     if (!view) {
-      root.innerHTML = CT.ui.emptyState('🛠️', 'No views registered yet',
+      root.innerHTML = CT.ui.emptyState('hammer', 'No views registered yet',
         'Foundation is up, but no feature views have loaded.');
+      paintIcons();
       return;
     }
 
@@ -90,12 +113,15 @@
     } catch (err) {
       console.error('View "' + view.id + '" failed to render:', err);
       root.innerHTML = CT.ui.card({
-        title: '⚠️ "' + view.label + '" could not load',
+        rawTitle: true,
+        title: '<i data-lucide="alert-triangle" style="vertical-align:-3px;"></i> &ldquo;' + CT.escapeHtml(view.label) + '&rdquo; could not load',
         body: '<p class="muted">This view hit an error but the rest of the app still works.</p>' +
-              '<pre style="white-space:pre-wrap;color:#ff6b6b;font-size:.8rem;">' +
+              '<pre style="white-space:pre-wrap;color:var(--down);font-size:.8rem;">' +
               CT.escapeHtml(String(err && err.message ? err.message : err)) + '</pre>'
       });
     }
+    // Paint any Lucide icons the view (or error card) emitted.
+    paintIcons();
   }
 
   // Toolbar actions (export / import / reset demo) wired once at boot.
@@ -109,6 +135,12 @@
       CT.ui.confirmDialog('Reset demo data',
         'Replace ALL current data with the fictional demo dataset? This cannot be undone.',
         'Reset to demo', function () { CT.store.resetToSample(); CT.ui.toast('Demo data restored'); route(); });
+    });
+    // Mobile quick-log '+': jump to the session-logging view once it ships
+    // (id 'lessons'), otherwise fall back to the roster.
+    const ql = document.getElementById('quick-log');
+    if (ql) ql.addEventListener('click', function () {
+      navigate(byId.lessons ? '#/lessons' : '#/roster');
     });
   }
 

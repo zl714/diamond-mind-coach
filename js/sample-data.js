@@ -26,7 +26,7 @@
     const teams = [], seasons = [], players = [], anthroReadings = [], assessmentSessions = [],
       metricReadings = [], games = [], battingStatLines = [], pitchingAppearances = [],
       fieldingStatLines = [], workloadLogs = [], dailyCheckIns = [], programs = [],
-      programAssignments = [], programSessions = [];
+      programAssignments = [], programSessions = [], drills = [], lessons = [];
 
     // ---- team / season ----
     const team = M.Team({ id: 'demo_team', name: 'Demo Mavericks (Travel)', ageBand: '13-14U', level: 'youth', season: '2026 Spring' });
@@ -163,6 +163,71 @@
     assignAndSchedule(mateo, progLongToss, 14);
     assignAndSchedule(owen, progPitchSmart, 30);
 
+    // ---- drill library (coach-managed) ----
+    function drill(id, name, category, defaultNotes) {
+      const d = M.Drill({ id: id, name: name, category: category, defaultNotes: defaultNotes || '' });
+      drills.push(d); return d;
+    }
+    const dSingleLeg = drill('demo_drill_singleleg', 'Single-Leg Hitting', 'Hitting', 'Balance + front-side connection. 2x10 each side.');
+    const dTee = drill('demo_drill_tee', 'Tee Work', 'Hitting', 'Barrel path + contact point. 3 rounds of 10.');
+    const dFrontToss = drill('demo_drill_fronttoss', 'Front Toss', 'Hitting', 'Timing + tracking. Mix speeds.');
+    const dSoftToss = drill('demo_drill_softtoss', 'Soft Toss', 'Hitting', 'Contact consistency, inside/outside.');
+    const dBullpen = drill('demo_drill_bullpen', 'Bullpen', 'Pitching', 'Command focus. Log pitch count for Pitch Smart.');
+    const dLongToss = drill('demo_drill_longtoss', 'Long Toss', 'Pitching', 'Arm health + arm strength. Ramp distance gradually.');
+    const dMedBall = drill('demo_drill_medball', 'Med-Ball Rotational', 'Strength', 'Hip-shoulder separation + sequencing. 3x8.');
+    const dLadder = drill('demo_drill_ladder', 'Ladder Agility', 'Mobility', 'First-step quickness + footwork.');
+    const dGroundBalls = drill('demo_drill_gb', 'Ground Ball Reps', 'Fielding', 'Field through the ball; clean transfers.');
+    const dLeadOffs = drill('demo_drill_leadoffs', 'Lead-Off Reads', 'Baserunning', 'Primary/secondary leads + first-step reads.');
+    const dBandCare = drill('demo_drill_bandcare', 'Band Arm Care', 'Mobility', 'Post-throw rotator-cuff + scap maintenance.');
+    const dBoxJumps = drill('demo_drill_boxjumps', 'Box Jumps', 'Strength', 'Lower-half power. 4x5, full recovery.');
+
+    // ---- lessons / coaching sessions (2-3 per player) ----
+    function lesson(player, date, drillList, notes, quickStats, ratingDelta) {
+      const l = M.Lesson({
+        playerId: player.id, date: date,
+        drillIds: drillList.map(function (d) { return d.id; }),
+        notes: notes, quickStats: quickStats || {},
+        ratingDelta: ratingDelta == null ? null : ratingDelta
+      });
+      lessons.push(l); return l;
+    }
+    lesson(mateo, daysBack(50), [dSingleLeg, dTee, dGroundBalls],
+      'Worked front-side connection off the tee; barrels jumped once we slowed the load. Ground-ball footwork: field through the ball.',
+      { exitVeloMax: 56, batSpeed: 45 }, 0.5);
+    lesson(mateo, daysBack(20), [dFrontToss, dGroundBalls, dLadder],
+      'Front toss timing much better against mixed speeds. Lateral range work at short — clean transfers.',
+      { exitVeloMax: 58 }, 0.3);
+    lesson(mateo, daysBack(8), [dTee, dMedBall, dLeadOffs],
+      'Added med-ball rotational for sequencing — staying inside the ball. Lead-off reads sharp.',
+      { exitVeloMax: 61, batSpeed: 48 }, 0.4);
+
+    lesson(jaylen, daysBack(40), [dBullpen, dLongToss, dBandCare],
+      'Bullpen: changeup feel improving, kept it down in the zone. Band arm care after to protect the arm.',
+      { fastballVelo: 65, secondaryVelo: 54 }, 0.4);
+    lesson(jaylen, daysBack(20), [dLongToss, dFrontToss],
+      'Long toss out to ~150 ft, clean and easy. Some front toss for timing on the CF days.',
+      { outfieldVelo: 72 }, 0.2);
+    lesson(jaylen, daysBack(8), [dBullpen, dBandCare],
+      'Bullpen strike rate up to ~62%. Arm felt great, no pain reported.',
+      { fastballVelo: 68, strikePct: 62 }, 0.5);
+
+    lesson(owen, daysBack(35), [dBullpen, dMedBall, dBandCare],
+      'Showcase prep. Velo holding 82. Med-ball for hip-shoulder separation; finished with band care.',
+      { fastballVelo: 82, secondaryVelo: 70 }, 0.3);
+    lesson(owen, daysBack(14), [dLongToss, dBandCare],
+      'Recovery day — long toss + band care only. Monitoring medial-elbow tightness, kept volume low.',
+      {}, 0);
+    lesson(owen, daysBack(2), [dBullpen, dBoxJumps],
+      'Light bullpen, then lower-half power. Flagged soreness afterward — see Arm Safety before next outing.',
+      { fastballVelo: 81 }, -0.1);
+
+    lesson(sofia, daysBack(28), [dTee, dLadder, dLeadOffs],
+      'First-step quickness drills. Reads off the bat in the outfield are improving week over week.',
+      { exitVeloMax: 48, sixtyYard: 8.6 }, 0.4);
+    lesson(sofia, daysBack(10), [dSoftToss, dLadder],
+      'Soft toss for contact consistency, inside and outside. Ladder agility — sharp and fun.',
+      { exitVeloMax: 50 }, 0.3);
+
     out.isSample = true;
     out.updatedAt = new Date().toISOString();
     out.teams = teams; out.seasons = seasons; out.players = players;
@@ -172,6 +237,7 @@
     out.fieldingStatLines = fieldingStatLines; out.workloadLogs = workloadLogs;
     out.dailyCheckIns = dailyCheckIns; out.programs = programs;
     out.programAssignments = programAssignments; out.programSessions = programSessions;
+    out.drills = drills; out.lessons = lessons;
     return out;
   }
 

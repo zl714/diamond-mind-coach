@@ -28,6 +28,21 @@
     adherence: 'Adherence'
   };
 
+  // One Lucide glyph per category so every tag is color + glyph + text.
+  const CAT_ICON = {
+    pain: 'heart-pulse',
+    pitchsmart: 'shield',
+    acwr: 'activity',
+    adherence: 'clipboard-check'
+  };
+
+  // Severity -> tone + glyph + label. Critical uses the baseball-red SEAM accent,
+  // caution uses amber (never the cyan brand accent, never green).
+  const SEVERITY = {
+    red: { tone: 'seam', icon: 'alert-octagon', label: 'Critical' },
+    yellow: { tone: 'yellow', icon: 'alert-triangle', label: 'Caution' }
+  };
+
   // ----- small pure helpers -----
   function byDateDesc(a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; }
 
@@ -195,19 +210,58 @@
   }
 
   // ----- rendering -----
+  // Severity badge: color + glyph + text (never color alone). Mirrors roster's
+  // clearanceBadge pattern — custom span so we can pair a Lucide glyph with tone.
+  function severityBadge(severity) {
+    const s = SEVERITY[severity] || SEVERITY.yellow;
+    return '<span class="badge" style="' + ui.toneStyle(s.tone) +
+      ';border-radius:var(--r-pill);padding:2px 8px;font-size:var(--fs-label);font-weight:var(--fw-semibold);border:1px solid;">' +
+      '<i data-lucide="' + s.icon + '"></i>' + esc(s.label) + '</span>';
+  }
+
+  // Category tag: neutral chrome + glyph + text (max one per row).
+  function categoryTag(category) {
+    return '<span class="badge alert-cat" style="' + ui.toneStyle('neutral') +
+      ';border-radius:var(--r-pill);padding:2px 8px;font-size:var(--fs-label);font-weight:var(--fw-medium);border:1px solid;">' +
+      '<i data-lucide="' + (CAT_ICON[category] || 'flag') + '"></i>' + esc(CAT_LABEL[category] || category) + '</span>';
+  }
+
   function alertCard(a) {
     const body =
       '<div class="alert-row">' +
-        ui.badge(CAT_LABEL[a.category] || a.category, a.severity) +
-        '<span class="alert-date">' + esc(CT.formatDate(a.date)) + '</span>' +
+        '<span class="alert-tags">' + severityBadge(a.severity) + categoryTag(a.category) + '</span>' +
+        '<span class="alert-date num">' + esc(CT.formatDate(a.date)) + '</span>' +
       '</div>' +
       '<div class="alert-title">' + esc(a.playerName) + '</div>' +
       '<div class="alert-issue">' + esc(a.title) + '</div>' +
       (a.detail ? '<div class="alert-detail muted">' + esc(a.detail) + '</div>' : '') +
-      '<div class="row" style="margin-top:.65rem;">' +
-        '<a class="btn btn-sm" href="#/' + esc(a.link) + '/' + esc(a.playerId) + '">' + esc(a.linkLabel) + ' →</a>' +
+      '<div class="row alert-actions">' +
+        '<a class="btn btn-sm" href="#/' + esc(a.link) + '/' + esc(a.playerId) + '">' +
+          '<i data-lucide="arrow-right"></i>' + esc(a.linkLabel) + '</a>' +
       '</div>';
     return ui.card({ body: body, className: 'alert-card sev-' + a.severity });
+  }
+
+  // Hero status — answers "is everything OK?" before the grid of equals.
+  // Critical -> seam; caution -> amber; all clear -> cyan brand accent (no green).
+  function heroBanner(red, yellow) {
+    let tone, icon, status, sub;
+    if (red > 0) {
+      tone = 'seam'; icon = 'alert-octagon'; status = 'Action needed';
+      sub = red + ' critical flag(s) need a coach decision now.';
+    } else if (yellow > 0) {
+      tone = 'yellow'; icon = 'alert-triangle'; status = 'Monitor';
+      sub = yellow + ' caution flag(s) — watch before loading up.';
+    } else {
+      tone = 'accent'; icon = 'shield-check'; status = 'All clear';
+      sub = 'No active pain, Pitch Smart, ACWR, or adherence flags.';
+    }
+    return '<div class="alerts-hero" style="' + ui.toneStyle(tone) + '">' +
+      '<span class="alerts-hero-icon"><i data-lucide="' + icon + '"></i></span>' +
+      '<div class="alerts-hero-text">' +
+        '<div class="alerts-hero-status">' + esc(status) + '</div>' +
+        '<div class="alerts-hero-sub">' + esc(sub) + '</div>' +
+      '</div></div>';
   }
 
   function render(root, ctx) {
@@ -221,7 +275,9 @@
     let html = ui.pageHead('Alerts',
       alerts.length + ' active flag(s) · ' + red + ' critical · ' + yellow + ' caution');
 
-    html += '<div class="stats" style="grid-template-columns:repeat(4,1fr);">' +
+    html += heroBanner(red, yellow);
+
+    html += '<div class="stats alerts-stats">' +
       ui.statTile(alerts.length, 'Active flags') +
       ui.statTile(red, 'Critical') +
       ui.statTile(yellow, 'Caution') +
@@ -229,14 +285,14 @@
       '</div>';
 
     if (!alerts.length) {
-      html += ui.emptyState('✅', 'All clear',
+      html += ui.emptyState('shield-check', 'All clear',
         'No pain flags, Pitch Smart violations, ACWR spikes, or program-adherence issues right now. Keep logging check-ins and workload to keep this feed honest.');
       root.innerHTML = html;
       return;
     }
 
     html += '<div class="grid-cards ct-alerts">' + alerts.map(alertCard).join('') + '</div>';
-    html += '<p class="muted" style="margin-top:1.1rem;font-size:.8rem;line-height:1.4;">' +
+    html += '<p class="alerts-foot muted">' +
       esc('Youth flags are guidance, not pass/fail. Pain reports auto-escalate to a medical referral; Pitch Smart rest, ' +
         'consecutive-day, and innings limits are hard rules. Tap a card to open the relevant view.') +
       '</p>';

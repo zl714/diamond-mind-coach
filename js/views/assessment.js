@@ -10,7 +10,7 @@
   'use strict';
 
   const CT = window.CT;
-  const ui = CT.ui, store = CT.store, model = CT.model, esc = CT.escapeHtml;
+  const ui = CT.ui, store = CT.store, model = CT.model, charts = CT.charts, esc = CT.escapeHtml;
 
   // Session-level context choices (sanitized per-metric on save — see resolveContext).
   const ASMT_CONTEXTS = ['tee', 'front-toss', 'machine', 'live-bp', 'bullpen', 'game', 'practice', 'test'];
@@ -72,7 +72,16 @@
     return rows;
   }
 
-  function pctTone(p) { return p >= 75 ? 'green' : (p >= 40 ? 'neutral' : 'yellow'); }
+  // Percentile rendered as a Baseball-Savant diverging bar (cold -> mid -> hot via
+  // charts.savantColor) — the DM analytics treatment, NOT a green pass/fail color.
+  // Label is tabular-nums and paired with the bar so it survives grayscale.
+  function pctBar(pct) {
+    const color = charts.savantColor(pct);
+    return '<div class="asmt-pct">' +
+      '<span class="asmt-pct-label num">P' + esc(String(pct)) + '</span>' +
+      '<span class="pct-bar"><span style="width:' + pct + '%;background:' + color + ';"></span></span>' +
+      '</div>';
+  }
 
   function latestValuesBody(player) {
     const band = bandFor(player);
@@ -82,14 +91,18 @@
     }
     const list = rows.map(function (x) {
       const pct = band ? CT.benchmarks.percentileFor(band, x.m.key, x.r.value) : null;
-      const pctPill = pct != null ? ' ' + ui.pill('P' + pct, pctTone(pct)) : '';
-      return '<div class="kv-row">' +
-        '<span class="k">' + esc(x.m.label) + ' <span class="muted" style="font-size:.74rem;">' + esc(x.r.aggregation) + ' · ' + esc(x.r.context) + '</span></span>' +
-        '<span class="v">' + esc(fmtVal(x.r.value)) + ' ' + esc(x.r.unit || x.m.unit) + pctPill + '</span>' +
-        '</div>';
+      return '<div class="asmt-metric">' +
+        '<div class="kv-row">' +
+          '<span class="k">' + esc(x.m.label) +
+            ' <span class="asmt-ctx muted">' + esc(x.r.aggregation) + ' · ' + esc(x.r.context) + '</span></span>' +
+          '<span class="v num">' + esc(fmtVal(x.r.value)) +
+            ' <span class="asmt-unit-inline muted">' + esc(x.r.unit || x.m.unit) + '</span></span>' +
+        '</div>' +
+        (pct != null ? pctBar(pct) : '') +
+      '</div>';
     }).join('');
-    return list +
-      '<div class="help" style="margin-top:.6rem;">Percentiles are TREND vs. age band, not pass/fail. ' + esc(CT.benchmarks.SOURCE_NOTE) + '</div>';
+    return '<div class="asmt-metrics">' + list + '</div>' +
+      '<div class="help asmt-note"><i data-lucide="info"></i> Percentiles are TREND vs. age band, not pass/fail. ' + esc(CT.benchmarks.SOURCE_NOTE) + '</div>';
   }
 
   function sessionCard(s) {
@@ -242,8 +255,8 @@
     const players = store.getPlayers();
     if (!players.length) {
       root.innerHTML = ui.pageHead('Assessments', 'Log assessment sessions & metric readings') +
-        ui.emptyState('📋', 'No players yet', 'Add a player on the Roster tab before logging assessments.',
-          '<a class="btn btn-primary" href="#/roster">Go to Roster</a>');
+        ui.emptyState('users', 'No players yet', 'Add a player on the Roster tab before logging assessments.',
+          '<a class="btn btn-primary" href="#/roster"><i data-lucide="users"></i>Go to Roster</a>');
       return;
     }
 
@@ -257,15 +270,15 @@
     if (focus) {
       const mySessions = sessions.filter(function (s) { return s.playerId === focus.id; });
       const age = model.ageFromBirthdate(focus.birthdate);
-      let html = '<a class="back-link" href="#/assessment">← All assessments</a>' +
+      let html = '<a class="back-link" href="#/assessment"><i data-lucide="chevron-left"></i>All assessments</a>' +
         ui.pageHead('Assessments — ' + focus.name,
           (bandFor(focus) || '—') + (age != null ? ' · ' + age + ' yrs' : '') + ' · ' + mySessions.length + ' session(s)',
-          '<button class="btn btn-primary" id="log-assess">+ Log assessment</button>');
+          '<button class="btn btn-primary" id="log-assess"><i data-lucide="clipboard-plus"></i>Log assessment</button>');
       html += ui.card({ title: 'Latest values', subtitle: 'Newest reading per metric', body: latestValuesBody(focus) });
       html += '<h3 style="margin:1.25rem 0 .6rem;">Session history</h3>';
       html += mySessions.length
         ? '<div class="timeline">' + mySessions.map(sessionCard).join('') + '</div>'
-        : ui.emptyState('📊', 'No sessions yet', 'Log this player\'s first assessment.');
+        : ui.emptyState('calendar', 'No sessions yet', 'Log this player\'s first assessment.');
       root.innerHTML = html;
       root.querySelector('#log-assess').addEventListener('click', function () { openForm(focus.id); });
       return;
@@ -276,7 +289,7 @@
     const assessedPlayers = players.filter(function (p) { return store.byPlayer('assessmentSessions', p.id).length > 0; }).length;
 
     let html = ui.pageHead('Assessments', sessions.length + ' session(s) · ' + readingCount + ' reading(s)',
-      '<button class="btn btn-primary" id="log-assess">+ Log assessment</button>');
+      '<button class="btn btn-primary" id="log-assess"><i data-lucide="clipboard-plus"></i>Log assessment</button>');
 
     html += '<div class="stats">' +
       ui.statTile(sessions.length, 'Sessions') +
@@ -286,15 +299,15 @@
 
     html += '<h3 style="margin:0 0 .6rem;">Latest values by player</h3>';
     html += '<div class="grid-cards">' + players.map(function (p) {
-      const actions = '<a class="btn btn-sm" href="#/assessment/' + esc(p.id) + '">Open</a>';
+      const actions = '<a class="btn btn-sm" href="#/assessment/' + esc(p.id) + '"><i data-lucide="arrow-right"></i>Open</a>';
       return ui.card({ title: p.name, subtitle: (bandFor(p) || '—') + ' · ' + p.level, actions: actions, body: latestValuesBody(p) });
     }).join('') + '</div>';
 
     html += '<h3 style="margin:1.25rem 0 .6rem;">Recent sessions</h3>';
     html += sessions.length
       ? '<div class="timeline">' + sessions.slice(0, 12).map(sessionCard).join('') + '</div>'
-      : ui.emptyState('📊', 'No assessments yet', 'Log your first assessment session to get started.',
-          '<button class="btn btn-primary" id="log-empty">+ Log assessment</button>');
+      : ui.emptyState('clipboard-list', 'No assessments yet', 'Log your first assessment session to get started.',
+          '<button class="btn btn-primary" id="log-empty"><i data-lucide="clipboard-plus"></i>Log assessment</button>');
 
     root.innerHTML = html;
     const log = root.querySelector('#log-assess');

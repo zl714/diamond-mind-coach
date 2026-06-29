@@ -1,45 +1,67 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-app="diamond-mind">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0d1b0e" />
-  <meta name="description" content="Coach Tracker — baseball player-development platform: roster, assessments, games, season stats, Pitch Smart arm safety, and training programs. Built by Zachary LeCroy." />
-  <title>Coach Tracker — Player Development Platform</title>
+  <meta name="theme-color" content="#030712" />
+  <meta name="description" content="Diamond Mind — baseball player-development platform: roster, drill library, coaching sessions, assessments, games, season stats, Pitch Smart arm safety, and training programs." />
+  <title>Diamond Mind</title>
+
+  <!-- Favicon = brand logo -->
+  <link rel="icon" type="image/png" href="assets/diamond-mind-logo.png" />
+  <link rel="apple-touch-icon" href="assets/diamond-mind-logo.png" />
+
+  <!-- Fonts: Geist + Geist Mono (tabular figures, slashed zero) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://unpkg.com" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <nav class="topnav">
-    <div class="topnav-inner">
-      <a class="brand" href="#/roster" aria-label="Coach Tracker home">
-        <span class="brand-mark" aria-hidden="true">&#9918;</span>
-        <span class="brand-name">Coach Tracker</span>
+  <div class="app-shell">
+    <!-- Left sidebar rail (desktop) / bottom tab bar (mobile) -->
+    <aside class="sidebar">
+      <a class="brand" href="#/roster" aria-label="Diamond Mind home">
+        <img class="brand-logo" src="assets/diamond-mind-logo.png" alt="Diamond Mind" />
+        <span class="brand-name">Diamond Mind</span>
         <span id="demo-badge" class="demo-badge" hidden>Demo data</span>
       </a>
-      <div class="toolbar">
-        <button id="btn-export" class="btn btn-sm btn-ghost" type="button" title="Export all data as JSON">Export</button>
-        <button id="btn-import" class="btn btn-sm btn-ghost" type="button" title="Import data from JSON">Import</button>
-        <button id="btn-reset" class="btn btn-sm btn-ghost" type="button" title="Reset to demo data">Reset demo</button>
-      </div>
-    </div>
-    <!-- Tab bar: built dynamically by the router from registered views -->
-    <div class="tabs-wrap"><nav id="view-tabs" class="view-tabs" aria-label="Sections"></nav></div>
-  </nav>
 
-  <main id="view-root" class="view" aria-live="polite">
-    <!-- Active view is rendered here by the router -->
-  </main>
+      <!-- Nav: built dynamically by the router from registered views -->
+      <nav id="view-tabs" class="view-tabs" aria-label="Sections"></nav>
+
+      <div class="sidebar-tools">
+        <button id="btn-export" class="btn btn-sm btn-ghost" type="button" title="Export all data as JSON"><i data-lucide="download"></i>Export</button>
+        <button id="btn-import" class="btn btn-sm btn-ghost" type="button" title="Import data from JSON"><i data-lucide="upload"></i>Import</button>
+        <button id="btn-reset" class="btn btn-sm btn-ghost" type="button" title="Reset to demo data"><i data-lucide="rotate-ccw"></i>Reset demo</button>
+        <p class="sidebar-foot">Data stays in your browser (localStorage). Youth-safety first (Pitch Smart).</p>
+      </div>
+    </aside>
+
+    <div class="app-main">
+      <main id="view-root" class="view" aria-live="polite">
+        <!-- Active view is rendered here by the router -->
+      </main>
+
+      <footer class="site-footer">
+        <p>Diamond Mind &middot; player-development platform &middot; data stays in your browser &middot; youth-safety first (Pitch Smart)</p>
+      </footer>
+    </div>
+
+    <!-- Mobile quick-log FAB (elevated center '+') -->
+    <button id="quick-log" class="quick-log-fab" type="button" aria-label="Log a coaching session"><i data-lucide="plus"></i></button>
+  </div>
 
   <div id="modal-root"></div>
   <div id="toast-root" class="toast-root" aria-live="assertive"></div>
 
-  <footer class="site-footer">
-    <p>Coach Tracker &middot; built by Zachary LeCroy &middot; data stays in your browser (localStorage) &middot; youth-safety first (Pitch Smart)</p>
-  </footer>
-
-  <!-- Chart.js 4 from CDN (no build step) -->
+  <!-- CDN libs (no build step) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Foundation scripts (order matters) -->
   <script src="js/constants.js"></script>
@@ -55,9 +77,9 @@
   <script src="js/charts.js"></script>
   <script src="js/app.js"></script>
 
-  <!-- Feature views: each calls CT.registerView() on load. Pre-included for all
-       of phase 2; the router skips any that haven't registered and try/catches
-       each render so one broken view never blanks the app. -->
+  <!-- Feature views: each calls CT.registerView() on load. The router skips any
+       that haven't registered and try/catches each render so one broken view
+       never blanks the app. -->
   <script src="js/views/roster.js"></script>
   <script src="js/views/dashboard.js"></script>
   <script src="js/views/assessment.js"></script>
@@ -66,5 +88,6 @@
   <script src="js/views/armsafety.js"></script>
   <script src="js/views/programs.js"></script>
   <script src="js/views/alerts.js"></script>
+  <script src="js/views/drills.js"></script>
 </body>
 </html>

@@ -7,17 +7,39 @@
 
   const CT = window.CT;
 
+  // Themed from the LeCroy Design System tokens (Diamond Mind cyan accent +
+  // seam-red secondary, separate semantic up/down axis, Savant diverging scale).
   const THEME = {
-    accent: '#7FFF00',
-    accentFill: 'rgba(127,255,0,0.15)',
-    text: '#e8f5e9',
-    tick: '#90c890',
-    grid: 'rgba(127,255,0,0.08)',
-    panel: '#162d1a',
-    border: 'rgba(127,255,0,0.4)',
-    danger: '#ff6b6b',
-    warn: '#ffcd50'
+    accent: '#00AEEF',                  // brand cyan (primary series)
+    accentFill: 'rgba(0,174,239,0.16)',
+    seam: '#EF4444',                    // secondary data accent (coral/red seam)
+    seam2: '#FB7185',
+    text: '#E2E8F0',
+    tick: '#94A3B8',
+    grid: 'rgba(255,255,255,0.06)',
+    panel: '#0F172A',
+    border: 'rgba(255,255,255,0.08)',
+    up: '#16C784',                      // positive axis
+    down: '#F23645',                    // negative axis
+    danger: '#F23645',
+    warn: '#FBBF24',
+    // Baseball-Savant diverging percentile scale (cold -> mid -> hot)
+    pctCold: '#5181B8',
+    pctMid: '#C9CDD4',
+    pctHot: '#D22D49'
   };
+
+  // Interpolate the Savant scale for a 0..100 percentile (cold -> mid -> hot).
+  function savantColor(pct) {
+    const p = Math.max(0, Math.min(100, Number(pct) || 0)) / 100;
+    function hex(c) { return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; }
+    function mix(a, b, t) { return 'rgb(' + a.map(function (v, i) { return Math.round(v + (b[i] - v) * t); }).join(',') + ')'; }
+    const cold = hex(THEME.pctCold), mid = hex(THEME.pctMid), hot = hex(THEME.pctHot);
+    return p < 0.5 ? mix(cold, mid, p / 0.5) : mix(mid, hot, (p - 0.5) / 0.5);
+  }
+
+  // Robinhood-style: color a trend by its net direction over the window.
+  function directionColor(net) { return Number(net) < 0 ? THEME.down : THEME.up; }
 
   // Registry of live charts so we can destroy them all on navigation.
   const live = [];
@@ -127,6 +149,8 @@
     scatter: scatter,
     track: track,
     destroyAll: destroyAll,
+    savantColor: savantColor,
+    directionColor: directionColor,
     // legacy alias used by old router code paths
     destroyChart: destroyAll
   };

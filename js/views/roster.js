@@ -17,18 +17,32 @@
 
   function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
 
+  // Pitch-Smart clearance as a color+glyph+text badge (never color alone).
   function clearanceBadge(player) {
     const logs = store.byPlayer('workloadLogs', player.id);
     if (!isPitcher(player) && !logs.length) {
-      return '<span class="muted" style="font-size:.82rem;">Not a pitcher</span>';
+      return '<span class="muted" style="font-size:var(--fs-data);">Not a pitcher</span>';
     }
     const v = CT.pitchsmart.evaluate(player, logs);
-    let label;
-    if (v.status === 'red') label = v.daysUntilEligible > 0 ? 'Resting (' + v.daysUntilEligible + 'd)' : 'Not cleared';
-    else if (v.status === 'yellow') label = 'Caution';
-    else label = 'Cleared';
-    return '<span class="status-dot ' + v.status + '"></span>' +
-      '<span style="font-weight:700;font-size:.85rem;color:var(--muted);">' + esc(label) + '</span>';
+    let tone, icon, label;
+    if (v.status === 'red') {
+      tone = 'red'; icon = 'x-circle';
+      label = v.daysUntilEligible > 0 ? 'Resting ' + v.daysUntilEligible + 'd' : 'Not cleared';
+    } else if (v.status === 'yellow') {
+      tone = 'yellow'; icon = 'alert-triangle'; label = 'Caution';
+    } else {
+      tone = 'green'; icon = 'check-circle'; label = 'Cleared';
+    }
+    return '<span class="badge" style="' + ui.toneStyle(tone) +
+      ';border-radius:9999px;padding:2px 8px;font-size:12px;font-weight:600;border:1px solid;">' +
+      '<i data-lucide="' + icon + '"></i>' + esc(label) + '</span>';
+  }
+
+  function clearedCount(players) {
+    return players.filter(function (p) {
+      if (!isPitcher(p)) return false;
+      return CT.pitchsmart.evaluate(p, store.byPlayer('workloadLogs', p.id)).status === 'green';
+    }).length;
   }
 
   function playerCard(p) {
@@ -56,8 +70,8 @@
         '<div class="kpi"><div class="k">Last assess</div><div class="v" style="font-size:1rem;">' + (lastAssess ? esc(CT.relativeDate(lastAssess)) : '—') + '</div></div>' +
       '</div>' +
       '<div class="row" style="margin-top:.7rem;">' +
-        '<button class="btn btn-sm" data-act="edit" data-id="' + esc(p.id) + '">Edit</button>' +
-        '<button class="btn btn-sm btn-danger" data-act="del" data-id="' + esc(p.id) + '">Delete</button>' +
+        '<button class="btn btn-sm" data-act="edit" data-id="' + esc(p.id) + '"><i data-lucide="pencil"></i>Edit</button>' +
+        '<button class="btn btn-sm btn-danger" data-act="del" data-id="' + esc(p.id) + '"><i data-lucide="trash-2"></i>Delete</button>' +
       '</div>';
     return ui.card({ body: body });
   }
@@ -140,15 +154,21 @@
     const pitchers = players.filter(isPitcher).length;
 
     let html = ui.pageHead('Roster', players.length + ' player(s) · ' + pitchers + ' pitcher(s)',
-      '<button class="btn btn-primary" id="add-player">+ Add player</button>');
+      '<button class="btn btn-primary" id="add-player"><i data-lucide="user-plus"></i>Add player</button>');
 
     if (!players.length) {
-      html += ui.emptyState('⚾', 'No players yet', 'Add your first player to get started.',
-        '<button class="btn btn-primary" id="add-empty">+ Add player</button>');
+      html += ui.emptyState('users', 'No players yet', 'Add your first player to get started.',
+        '<button class="btn btn-primary" id="add-empty"><i data-lucide="user-plus"></i>Add player</button>');
       root.innerHTML = html;
       const ae = root.querySelector('#add-empty');
       if (ae) ae.addEventListener('click', function () { openForm(null); });
     } else {
+      // Hero KPI row — answers "is everything OK?" before the grid of equals.
+      html += '<div class="stats">' +
+        ui.statTile(players.length, 'Players') +
+        ui.statTile(pitchers, 'Pitchers') +
+        ui.statTile(clearedCount(players), 'Cleared to pitch') +
+        '</div>';
       html += '<div class="grid-cards">' +
         players.map(function (p) { return '<div data-card="' + esc(p.id) + '">' + playerCard(p) + '</div>'; }).join('') +
         '</div>';

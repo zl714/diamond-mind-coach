@@ -34,6 +34,8 @@
     programs: 'Program',
     programAssignments: 'ProgramAssignment',
     programSessions: 'ProgramSession',
+    drills: 'Drill',
+    lessons: 'Lesson',
     benchmarks: 'Benchmark'
   };
   const COLLECTION_NAMES = Object.keys(COLLECTIONS);
@@ -170,7 +172,7 @@
   function deletePlayerCascade(playerId) {
     const childCollections = ['anthroReadings', 'assessmentSessions', 'metricReadings',
       'battingStatLines', 'pitchingAppearances', 'fieldingStatLines', 'workloadLogs',
-      'dailyCheckIns', 'programAssignments', 'programSessions'];
+      'dailyCheckIns', 'programAssignments', 'programSessions', 'lessons'];
     const next = { players: (getState().players || []).filter(function (p) { return p.id !== playerId; }) };
     childCollections.forEach(function (c) {
       next[c] = (getState()[c] || []).filter(function (r) { return r.playerId !== playerId; });
@@ -191,6 +193,34 @@
       return (a.createdAt || '') < (b.createdAt || '') ? -1 : 1;
     });
     return rows[rows.length - 1];
+  }
+
+  // ---- Drill library + Lessons (coaching-session workflow) ----
+  // The DrillLibrary is just the `drills` collection. Both drills and lessons use
+  // the generic insert/append/update/remove CRUD; these are convenience reads +
+  // append-only-friendly writers for the drag-drop board and the notes editor.
+  function drillLibrary() {
+    return all('drills').sort(function (a, b) {
+      if (a.category !== b.category) return a.category < b.category ? -1 : 1;
+      return a.name < b.name ? -1 : 1;
+    });
+  }
+  function getDrill(id) { return getById('drills', id); }
+  function drillsByCategory(cat) { return where('drills', 'category', cat); }
+  function getLesson(id) { return getById('lessons', id); }
+  // Newest-first, the order session timelines expect.
+  function lessonsForPlayer(playerId) {
+    return byPlayer('lessons', playerId).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  }
+  // Persist the (re)ordered drill list for a lesson — call from SortableJS onEnd
+  // with col.toArray() (an array of data-id strings).
+  function setLessonDrills(lessonId, drillIds) {
+    return update('lessons', lessonId, { drillIds: Array.isArray(drillIds) ? drillIds.map(String) : [] });
+  }
+  // Notes are keyed on the STABLE lesson id (never board position) so they follow
+  // the lesson regardless of how its drills are dragged/reordered.
+  function setLessonNotes(lessonId, body) {
+    return update('lessons', lessonId, { notes: body == null ? '' : String(body) });
   }
 
   function lastAssessmentDate(playerId) {
@@ -248,6 +278,14 @@
     getPlayer: function (id) { return getById('players', id); },
     latestMetric: latestMetric,
     lastAssessmentDate: lastAssessmentDate,
+    // drill library + lessons (coaching-session workflow)
+    drillLibrary: drillLibrary,
+    getDrill: getDrill,
+    drillsByCategory: drillsByCategory,
+    getLesson: getLesson,
+    lessonsForPlayer: lessonsForPlayer,
+    setLessonDrills: setLessonDrills,
+    setLessonNotes: setLessonNotes,
     // mutations
     insert: insert,
     append: append,

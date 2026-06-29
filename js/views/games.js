@@ -369,50 +369,58 @@
     }).join('') + '</div>';
   }
 
+  // Numeric table header: all but the first (label) and last (action) cols are .num.
+  function numHead(cols) {
+    const last = cols.length - 1;
+    return '<thead><tr>' + cols.map(function (h, i) {
+      return '<th' + (i === 0 || i === last ? '' : ' class="num"') + '>' + esc(h) + '</th>';
+    }).join('') + '</tr></thead>';
+  }
+  // Numeric data cells: array of values rendered right-aligned + tabular.
+  function numCells(vals) {
+    return vals.map(function (v) { return '<td class="num">' + v + '</td>'; }).join('');
+  }
+
   function batTable(game, final) {
     const lines = gameLines(game).bat;
-    if (!lines.length) return ui.emptyState('🪵', 'No batting lines yet', 'Add a batter to start the box score.');
+    if (!lines.length) return ui.emptyState('list', 'No batting lines yet', 'Add a batter to start the box score.');
     let rows = lines.map(function (l) {
       const d = stats.battingFromLines([l]);
-      const editBtn = final ? '' : '<button class="btn btn-sm btn-ghost" data-bat="' + esc(l.id) + '">Edit</button>';
-      return '<tr><td>' + esc(playerName(l.playerId)) + '</td><td>' + d.pa + '</td><td>' + l.ab + '</td><td>' + l.h +
-        '</td><td>' + d.singles + '</td><td>' + l.b2 + '</td><td>' + l.b3 + '</td><td>' + l.hr + '</td><td>' + l.bb +
-        '</td><td>' + l.so + '</td><td>' + l.r + '</td><td>' + l.rbi + '</td><td>' + stats.fmtRate(d.avg) +
-        '</td><td>' + stats.fmtRate(d.ops) + '</td><td>' + editBtn + '</td></tr>';
+      const editBtn = final ? '' : '<button class="btn btn-sm btn-ghost" data-bat="' + esc(l.id) + '"><i data-lucide="pencil"></i>Edit</button>';
+      return '<tr><td>' + esc(playerName(l.playerId)) + '</td>' +
+        numCells([d.pa, l.ab, l.h, d.singles, l.b2, l.b3, l.hr, l.bb, l.so, l.r, l.rbi, stats.fmtRate(d.avg), stats.fmtRate(d.ops)]) +
+        '<td>' + editBtn + '</td></tr>';
     }).join('');
     const tot = stats.battingFromLines(lines);
-    rows += '<tr class="games-total"><td>Team</td><td>' + tot.pa + '</td><td>' + tot.ab + '</td><td>' + tot.h +
-      '</td><td>' + tot.singles + '</td><td>' + tot.b2 + '</td><td>' + tot.b3 + '</td><td>' + tot.hr + '</td><td>' + tot.bb +
-      '</td><td>' + tot.so + '</td><td>' + tot.r + '</td><td>' + tot.rbi + '</td><td>' + stats.fmtRate(tot.avg) +
-      '</td><td>' + stats.fmtRate(tot.ops) + '</td><td></td></tr>';
-    return '<div class="table-wrap"><table class="ct-table"><thead><tr>' +
-      ['Batter', 'PA', 'AB', 'H', '1B', '2B', '3B', 'HR', 'BB', 'SO', 'R', 'RBI', 'AVG', 'OPS', ''].map(function (h) { return '<th>' + h + '</th>'; }).join('') +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    rows += '<tr class="games-total"><td>Team</td>' +
+      numCells([tot.pa, tot.ab, tot.h, tot.singles, tot.b2, tot.b3, tot.hr, tot.bb, tot.so, tot.r, tot.rbi, stats.fmtRate(tot.avg), stats.fmtRate(tot.ops)]) +
+      '<td></td></tr>';
+    return '<div class="table-wrap"><table class="ct-table">' +
+      numHead(['Batter', 'PA', 'AB', 'H', '1B', '2B', '3B', 'HR', 'BB', 'SO', 'R', 'RBI', 'AVG', 'OPS', '']) +
+      '<tbody>' + rows + '</tbody></table></div>';
   }
 
   function pitTable(game, final) {
     const lines = gameLines(game).pit;
-    if (!lines.length) return ui.emptyState('🎯', 'No pitching outings yet', 'Add an outing — finalize logs it to Pitch Smart.');
+    if (!lines.length) return ui.emptyState('target', 'No pitching outings yet', 'Add an outing — finalize logs it to Pitch Smart.');
     const meta = metaOf(game);
     let rows = lines.map(function (l) {
       const ipg = model.inningsPerGame(playerLevel(l.playerId)); // ALWAYS the pitcher's level
       const d = stats.pitchingFromApps([l], ipg);
       const dec = meta.dec[l.id];
       const decTag = dec ? ' ' + ui.badge(dec, dec === 'W' ? 'green' : (dec === 'L' || dec === 'BS' ? 'red' : 'neutral')) : '';
-      const editBtn = final ? '' : '<button class="btn btn-sm btn-ghost" data-pit="' + esc(l.id) + '">Edit</button>';
-      return '<tr><td>' + esc(playerName(l.playerId)) + decTag + '</td><td>' + d.ipDisplay + '</td><td>' + l.h +
-        '</td><td>' + l.r + '</td><td>' + l.er + '</td><td>' + l.bb + '</td><td>' + l.so + '</td><td>' + l.hr +
-        '</td><td>' + l.pitches + '</td><td>' + stats.fmt2(d.era) + '</td><td>' + stats.fmt2(d.whip) +
-        '</td><td>' + stats.fmtPct(d.strikePct, 0) + '</td><td>' + stats.fmtPct(d.fpsPct, 0) + '</td><td>' + editBtn + '</td></tr>';
+      const editBtn = final ? '' : '<button class="btn btn-sm btn-ghost" data-pit="' + esc(l.id) + '"><i data-lucide="pencil"></i>Edit</button>';
+      return '<tr><td>' + esc(playerName(l.playerId)) + decTag + '</td>' +
+        numCells([d.ipDisplay, l.h, l.r, l.er, l.bb, l.so, l.hr, l.pitches, stats.fmt2(d.era), stats.fmt2(d.whip), stats.fmtPct(d.strikePct, 0), stats.fmtPct(d.fpsPct, 0)]) +
+        '<td>' + editBtn + '</td></tr>';
     }).join('');
     const tot = stats.pitchingFromApps(lines, gameIpg(game));
-    rows += '<tr class="games-total"><td>Team</td><td>' + tot.ipDisplay + '</td><td>' + tot.h + '</td><td>' + tot.r +
-      '</td><td>' + tot.er + '</td><td>' + tot.bb + '</td><td>' + tot.so + '</td><td>' + tot.hr + '</td><td>' + tot.pitches +
-      '</td><td>' + stats.fmt2(tot.era) + '</td><td>' + stats.fmt2(tot.whip) + '</td><td>' + stats.fmtPct(tot.strikePct, 0) +
-      '</td><td>' + stats.fmtPct(tot.fpsPct, 0) + '</td><td></td></tr>';
-    const table = '<div class="table-wrap"><table class="ct-table"><thead><tr>' +
-      ['Pitcher', 'IP', 'H', 'R', 'ER', 'BB', 'SO', 'HR', 'P', 'ERA', 'WHIP', 'K%', 'FPS%', ''].map(function (h) { return '<th>' + h + '</th>'; }).join('') +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    rows += '<tr class="games-total"><td>Team</td>' +
+      numCells([tot.ipDisplay, tot.h, tot.r, tot.er, tot.bb, tot.so, tot.hr, tot.pitches, stats.fmt2(tot.era), stats.fmt2(tot.whip), stats.fmtPct(tot.strikePct, 0), stats.fmtPct(tot.fpsPct, 0)]) +
+      '<td></td></tr>';
+    const table = '<div class="table-wrap"><table class="ct-table">' +
+      numHead(['Pitcher', 'IP', 'H', 'R', 'ER', 'BB', 'SO', 'HR', 'P', 'ERA', 'WHIP', 'K%', 'FPS%', '']) +
+      '<tbody>' + rows + '</tbody></table></div>';
     return table + pitchSmartStrip(lines);
   }
 
@@ -437,24 +445,26 @@
 
   function fldTable(game, final) {
     const lines = gameLines(game).fld;
-    if (!lines.length) return ui.emptyState('🧤', 'No fielding lines yet', 'Add PO / A / E for a fielder.');
+    if (!lines.length) return ui.emptyState('hand', 'No fielding lines yet', 'Add PO / A / E for a fielder.');
     let rows = lines.map(function (l) {
       const d = stats.fieldingFromLines([l]);
-      const editBtn = final ? '' : '<button class="btn btn-sm btn-ghost" data-fld="' + esc(l.id) + '">Edit</button>';
-      return '<tr><td>' + esc(playerName(l.playerId)) + '</td><td>' + esc(l.position || '—') + '</td><td>' + l.po +
-        '</td><td>' + l.a + '</td><td>' + l.e + '</td><td>' + stats.fmtRate(d.fieldingPct) + '</td><td>' + editBtn + '</td></tr>';
+      const editBtn = final ? '' : '<button class="btn btn-sm btn-ghost" data-fld="' + esc(l.id) + '"><i data-lucide="pencil"></i>Edit</button>';
+      return '<tr><td>' + esc(playerName(l.playerId)) + '</td><td>' + esc(l.position || '—') + '</td>' +
+        numCells([l.po, l.a, l.e, stats.fmtRate(d.fieldingPct)]) + '<td>' + editBtn + '</td></tr>';
     }).join('');
     const tot = stats.fieldingFromLines(lines);
-    rows += '<tr class="games-total"><td>Team</td><td>—</td><td>' + tot.po + '</td><td>' + tot.a + '</td><td>' + tot.e +
-      '</td><td>' + stats.fmtRate(tot.fieldingPct) + '</td><td></td></tr>';
-    return '<div class="table-wrap"><table class="ct-table"><thead><tr>' +
-      ['Fielder', 'Pos', 'PO', 'A', 'E', 'Field% (reliab.)', ''].map(function (h) { return '<th>' + h + '</th>'; }).join('') +
-      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    rows += '<tr class="games-total"><td>Team</td><td>—</td>' +
+      numCells([tot.po, tot.a, tot.e, stats.fmtRate(tot.fieldingPct)]) + '<td></td></tr>';
+    return '<div class="table-wrap"><table class="ct-table">' +
+      // 'Pos' is a text column, so override numHead with an explicit header row.
+      '<thead><tr><th>Fielder</th><th>Pos</th><th class="num">PO</th><th class="num">A</th><th class="num">E</th><th class="num">Field% (reliab.)</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
   }
 
   function sectionCard(title, addLabel, addAct, tableHtml, final) {
-    const actions = final ? ui.badge('Locked', 'neutral') :
-      '<button class="btn btn-sm btn-primary" data-add="' + addAct + '">' + esc(addLabel) + '</button>';
+    const actions = final
+      ? ui.badge('Locked', 'neutral')
+      : '<button class="btn btn-sm btn-primary" data-add="' + addAct + '"><i data-lucide="plus"></i>' + esc(addLabel) + '</button>';
     return ui.card({ title: title, actions: actions, body: tableHtml });
   }
 
@@ -463,11 +473,11 @@
     const final = !!meta.final;
     const ls = gameLines(game);
     const head = ui.pageHead(vsLabel(game), CT.formatDate(game.date) + ' · ' + (game.homeAway === 'away' ? 'Away' : 'Home') + ' · ' + gameIpg(game) + ' inn/game',
-      '<button class="btn btn-ghost" data-act="back">← Games</button>');
+      '<button class="btn btn-ghost" data-act="back"><i data-lucide="arrow-left"></i>Games</button>');
 
     const summary = ui.card({
       rawTitle: true,
-      title: resultBadge(game) + ' ' + (final ? ui.badge('Final · v' + (meta.v || 1), 'green') : ui.badge('Draft · v' + (meta.v || 1), 'yellow')),
+      title: resultBadge(game) + ' ' + (final ? ui.badge('Final · v' + (meta.v || 1), 'accent') : ui.badge('Draft · v' + (meta.v || 1), 'yellow')),
       body:
         statChips([
           ['batters', ls.bat.length], ['pitchers', ls.pit.length], ['fielders', ls.fld.length]
@@ -475,19 +485,19 @@
         (cleanNotes(game) ? '<p class="muted" style="margin-top:.6rem;">' + esc(cleanNotes(game)) + '</p>' : '') +
         '<div class="row" style="margin-top:.8rem;">' +
           (final
-            ? '<button class="btn btn-sm" data-act="reopen">Reopen (new version)</button>'
-            : '<button class="btn btn-sm btn-primary" data-act="finalize">Finalize game</button>') +
-          '<button class="btn btn-sm" data-act="editgame">Edit game</button>' +
-          '<button class="btn btn-sm btn-danger" data-act="delgame">Delete</button>' +
+            ? '<button class="btn btn-sm" data-act="reopen"><i data-lucide="rotate-ccw"></i>Reopen (new version)</button>'
+            : '<button class="btn btn-sm btn-primary" data-act="finalize"><i data-lucide="lock"></i>Finalize game</button>') +
+          '<button class="btn btn-sm" data-act="editgame"><i data-lucide="pencil"></i>Edit game</button>' +
+          '<button class="btn btn-sm btn-danger" data-act="delgame"><i data-lucide="trash-2"></i>Delete</button>' +
         '</div>' +
         (final ? '<p class="muted" style="margin-top:.6rem;font-size:.8rem;">Locked. Reopen to correct — workload already logged for Pitch Smart stays put (never re-counted).</p>'
                : '<p class="muted" style="margin-top:.6rem;font-size:.8rem;">Enter raw counters, then Finalize to commit pitching workload to Pitch Smart.</p>')
     });
 
     root.innerHTML = head + summary +
-      '<div class="games-section">' + sectionCard('Batting', '+ Batter', 'bat', batTable(game, final), final) + '</div>' +
-      '<div class="games-section">' + sectionCard('Pitching', '+ Outing', 'pit', pitTable(game, final), final) + '</div>' +
-      '<div class="games-section">' + sectionCard('Fielding', '+ Fielder', 'fld', fldTable(game, final), final) + '</div>';
+      '<div class="games-section">' + sectionCard('Batting', 'Batter', 'bat', batTable(game, final), final) + '</div>' +
+      '<div class="games-section">' + sectionCard('Pitching', 'Outing', 'pit', pitTable(game, final), final) + '</div>' +
+      '<div class="games-section">' + sectionCard('Fielding', 'Fielder', 'fld', fldTable(game, final), final) + '</div>';
 
     // wire toolbar
     root.querySelector('[data-act="back"]').addEventListener('click', function () { CT.router.navigate('#/games'); });
@@ -519,12 +529,12 @@
     const final = isFinal(game);
     const body =
       '<div class="games-card-head">' + resultBadge(game) +
-        (final ? ui.badge('Final', 'green') : ui.badge('Draft', 'yellow')) + '</div>' +
+        (final ? ui.badge('Final', 'accent') : ui.badge('Draft', 'yellow')) + '</div>' +
       statChips([['batters', ls.bat.length], ['pitchers', ls.pit.length], ['fielders', ls.fld.length]]) +
       '<div class="row" style="margin-top:.7rem;">' +
-        '<button class="btn btn-sm btn-primary" data-open="' + esc(game.id) + '">Box score</button>' +
-        '<button class="btn btn-sm" data-edit="' + esc(game.id) + '">Edit</button>' +
-        '<button class="btn btn-sm btn-danger" data-del="' + esc(game.id) + '">Delete</button>' +
+        '<button class="btn btn-sm btn-primary" data-open="' + esc(game.id) + '"><i data-lucide="clipboard-list"></i>Box score</button>' +
+        '<button class="btn btn-sm" data-edit="' + esc(game.id) + '"><i data-lucide="pencil"></i>Edit</button>' +
+        '<button class="btn btn-sm btn-danger" data-del="' + esc(game.id) + '"><i data-lucide="trash-2"></i>Delete</button>' +
       '</div>';
     return ui.card({ title: vsLabel(game), subtitle: CT.formatDate(game.date) + ' · ' + (game.homeAway === 'away' ? 'Away' : 'Home'), body: body });
   }
@@ -535,11 +545,11 @@
       return (a.createdAt || '') < (b.createdAt || '') ? 1 : -1;
     });
     let html = ui.pageHead('Games', games.length + ' game(s) · box scores & raw stat lines',
-      '<button class="btn btn-primary" id="new-game">+ New game</button>');
+      '<button class="btn btn-primary" id="new-game"><i data-lucide="plus"></i>New game</button>');
 
     if (!games.length) {
-      html += ui.emptyState('⚾', 'No games yet', 'Create a game, then enter batting, pitching and fielding lines.',
-        '<button class="btn btn-primary" id="new-game-empty">+ New game</button>');
+      html += ui.emptyState('calendar-plus', 'No games yet', 'Create a game, then enter batting, pitching and fielding lines.',
+        '<button class="btn btn-primary" id="new-game-empty"><i data-lucide="plus"></i>New game</button>');
       root.innerHTML = html;
       const e = root.querySelector('#new-game-empty'); if (e) e.addEventListener('click', function () { openGameForm(null); });
     } else {
@@ -560,8 +570,8 @@
     const game = ctx && ctx.param ? store.getById('games', ctx.param) : null;
     if (ctx && ctx.param && !game) {
       root.innerHTML = ui.pageHead('Games', 'Box scores & raw stat lines') +
-        ui.emptyState('🔍', 'Game not found', 'That game no longer exists.',
-          '<button class="btn btn-primary" data-act="back">← All games</button>');
+        ui.emptyState('search-x', 'Game not found', 'That game no longer exists.',
+          '<button class="btn btn-primary" data-act="back"><i data-lucide="arrow-left"></i>All games</button>');
       const b = root.querySelector('[data-act="back"]'); if (b) b.addEventListener('click', function () { CT.router.navigate('#/games'); });
       return;
     }

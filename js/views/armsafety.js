@@ -1,9 +1,11 @@
 /* views/armsafety.js — Pitch-Count / Arm-Safety Console (the signature safety view).
-   Per-player workload from CT.pitchsmart: a big red/green "Cleared to Pitch?" flag,
-   remaining pitches today, days-until-eligible, rolling 12-month innings, consecutive-
-   day warnings, ACWR, and a stacked pitch/throw workload chart with an ACWR overlay
-   and Pitch Smart required-rest shading. Pure foundation API; registers itself via
-   CT.registerView('armsafety', { label, render }). Youth-safety framing throughout. */
+   Per-player workload from CT.pitchsmart: a big "Cleared to Pitch?" flag (cyan accent,
+   seam-red #EF4444 for NOT CLEARED), remaining pitches today, days-until-eligible,
+   rolling 12-month innings, consecutive-day warnings, ACWR, and a stacked pitch/throw
+   workload chart with an ACWR overlay and Pitch Smart required-rest shading.
+   Pure foundation API; registers itself via CT.registerView('armsafety', {...}).
+   Reskinned to the LeCroy / Diamond Mind design system (cyan accent + seam-red
+   secondary, no green chrome, tabular-nums, Lucide glyphs, color+glyph+text). */
 (function () {
   'use strict';
 
@@ -11,13 +13,14 @@
   const ui = CT.ui, store = CT.store, model = CT.model, ps = CT.pitchsmart;
   const charts = CT.charts, esc = CT.escapeHtml;
 
-  // Workload-type buckets -> chart series + colors.
+  // Workload-type buckets -> chart series + colors, sourced from the DM theme.
+  // Cyan = brand accent; seam-red = Pitch Smart required-rest highlight; gold = ACWR.
   const COLORS = {
-    game: '#7FFF00',
-    bullpen: 'rgba(127,255,0,0.45)',
-    other: 'rgba(144,200,144,0.55)',
-    rest: 'rgba(255,107,107,0.13)',
-    acwr: '#ffcd50'
+    game: charts.THEME.accent,              // brand cyan (primary series)
+    bullpen: 'rgba(0,174,239,0.45)',        // lighter cyan
+    other: 'rgba(148,163,184,0.55)',        // neutral slate
+    rest: 'rgba(239,68,68,0.13)',           // seam-tinted required-rest shading
+    acwr: charts.THEME.warn                 // amber (caution axis)
   };
 
   // ----- helpers -----
@@ -50,14 +53,23 @@
     return 'other';
   }
 
+  // ACWR zone -> tone. Stay token-backed (no green chrome): optimal=cyan accent,
+  // danger=seam, caution/low=warn, unknown=neutral.
   function acwrTone(zone) {
-    if (zone === 'optimal') return 'green';
-    if (zone === 'danger') return 'red';
-    if (zone === 'caution' || zone === 'low') return 'yellow';
+    if (zone === 'optimal') return 'accent';
+    if (zone === 'danger') return 'seam';
+    if (zone === 'caution' || zone === 'low') return 'warn';
     return 'neutral';
   }
 
-  // ----- the big "Cleared to Pitch?" flag -----
+  // Status -> the leading Lucide glyph (pairs with color + text, never color alone).
+  function statusGlyph(status) {
+    if (status === 'red') return 'shield-alert';
+    if (status === 'yellow') return 'alert-triangle';
+    return 'shield-check';
+  }
+
+  // ----- the big "Cleared to Pitch?" flag (color + glyph + text) -----
   function flagBanner(v) {
     let head, sub;
     if (v.status === 'red') {
@@ -73,7 +85,7 @@
       sub = 'Within all Pitch Smart rest and workload limits.';
     }
     return '<div class="as-flag ' + v.status + '">' +
-      '<span class="as-dot"></span>' +
+      '<i data-lucide="' + statusGlyph(v.status) + '" class="as-glyph"></i>' +
       '<div><p class="as-q">' + esc(head) + '</p>' +
       '<p class="as-sub">' + esc(sub) + '</p></div>' +
     '</div>';
@@ -83,15 +95,16 @@
     const c = latestCheckIn(player.id);
     if (!c || !c.armPain) return '';
     const where = c.painLocation ? ' (' + esc(c.painLocation) + ')' : '';
-    return '<div class="as-pain"><strong>Arm pain reported ' +
-      esc(CT.relativeDate(c.date)) + where + '.</strong> ' +
-      'Per youth-safety protocol, hold throwing and recommend a medical/clinician evaluation before return.</div>';
+    return '<div class="as-pain"><i data-lucide="alert-octagon"></i>' +
+      '<div><strong>Arm pain reported ' + esc(CT.relativeDate(c.date)) + where + '.</strong> ' +
+      'Per youth-safety protocol, hold throwing and recommend a medical/clinician evaluation before return.</div></div>';
   }
 
   function kpiGrid(v) {
     const capPct = Math.min(100, (v.rolling12moInnings / v.inningsCap) * 100);
-    const capColor = v.overInningsCap ? 'var(--danger)' : 'var(--accent)';
-    const remTone = v.remainingToday <= 0 ? 'var(--danger)' : 'var(--accent)';
+    const capColor = v.overInningsCap ? 'var(--seam)' : 'var(--accent-400)';
+    const remColor = v.remainingToday <= 0 ? 'var(--seam)' : 'var(--accent-400)';
+    const streakColor = v.consecutiveStreak >= 3 ? 'var(--seam)' : 'var(--accent-400)';
     const acwrRatio = v.acwr.ratio != null ? v.acwr.ratio.toFixed(2) : '—';
     const last = v.lastOuting
       ? CT.relativeDate(v.lastOuting.date) + ' · ' + v.lastOuting.pitches + ' pitch'
@@ -99,18 +112,19 @@
 
     return '<div class="kpi-grid" style="margin-top:.2rem;">' +
       '<div class="kpi"><div class="k">Remaining today</div>' +
-        '<div class="v" style="color:' + remTone + ';">' + v.remainingToday + ' <span style="font-size:.8rem;color:var(--body-2);">/ ' + v.dailyMax + '</span></div></div>' +
+        '<div class="v num" style="color:' + remColor + ';">' + v.remainingToday +
+        ' <span style="font-size:var(--fs-data);color:var(--text-secondary);font-weight:var(--fw-regular);">/ ' + v.dailyMax + '</span></div></div>' +
       '<div class="kpi"><div class="k">Days until eligible</div>' +
-        '<div class="v">' + (v.daysUntilEligible > 0 ? v.daysUntilEligible + 'd' : 'Now') + '</div></div>' +
+        '<div class="v num">' + (v.daysUntilEligible > 0 ? v.daysUntilEligible + 'd' : 'Now') + '</div></div>' +
       '<div class="kpi"><div class="k">ACWR (7d:28d)</div>' +
-        '<div class="v" style="font-size:1rem;">' + acwrRatio + ' ' + ui.pill(v.acwr.zone, acwrTone(v.acwr.zone)) + '</div></div>' +
+        '<div class="v" style="font-size:var(--fs-h4);"><span class="num">' + acwrRatio + '</span> ' + ui.pill(v.acwr.zone, acwrTone(v.acwr.zone)) + '</div></div>' +
       '<div class="kpi"><div class="k">Consecutive days</div>' +
-        '<div class="v" style="color:' + (v.consecutiveStreak >= 3 ? 'var(--danger)' : 'var(--accent)') + ';">' + v.consecutiveStreak + '</div></div>' +
+        '<div class="v num" style="color:' + streakColor + ';">' + v.consecutiveStreak + '</div></div>' +
       '<div class="kpi" style="grid-column:span 2;"><div class="k">Rolling 12-mo innings (cap ' + v.inningsCap + ')</div>' +
-        '<div class="v" style="color:' + capColor + ';font-size:1rem;">' + v.rolling12moInnings.toFixed(1) + ' IP</div>' +
+        '<div class="v num" style="color:' + capColor + ';font-size:var(--fs-h4);">' + v.rolling12moInnings.toFixed(1) + ' IP</div>' +
         '<div class="as-cap-bar"><span style="width:' + capPct.toFixed(0) + '%;background:' + capColor + ';"></span></div></div>' +
       '<div class="kpi" style="grid-column:span 2;"><div class="k">Last outing</div>' +
-        '<div class="v" style="font-size:.95rem;">' + esc(last) + '</div></div>' +
+        '<div class="v" style="font-size:var(--fs-sm);">' + esc(last) + '</div></div>' +
     '</div>';
   }
 
@@ -220,7 +234,7 @@
       ui.formField({ type: 'number', name: 'rpe', label: 'RPE (1–10)', value: '', min: 1, max: 10, step: 1 }) +
       '<div class="modal-actions">' +
         '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
-        '<button class="btn btn-primary" data-act="save">Log outing</button>' +
+        '<button class="btn btn-primary" data-act="save"><i data-lucide="plus"></i>Log outing</button>' +
       '</div>';
 
     ui.openModal('Log outing — ' + player.name, html, function (modal, close) {
@@ -255,15 +269,15 @@
     let body = flagBanner(v) + painBanner(player) + kpiGrid(v) + reasonsList(v);
 
     if (logs.length) {
-      body += '<div class="chart-wrap" style="margin-top:.9rem;"><canvas id="as-chart-' + esc(player.id) + '"></canvas></div>' +
-        '<p class="as-note">Stacked bars = pitches by session type; gold line = ACWR (7-day acute vs 28-day chronic); red columns = Pitch Smart required-rest days.</p>';
+      body += '<div class="chart-wrap" style="margin-top:var(--sp-3);"><canvas id="as-chart-' + esc(player.id) + '"></canvas></div>' +
+        '<p class="as-note">Stacked bars = pitches by session type; amber line = ACWR (7-day acute vs 28-day chronic); seam-red columns = Pitch Smart required-rest days.</p>';
     } else {
-      body += '<div style="margin-top:.8rem;">' +
-        ui.emptyState('🗒️', 'No workload logged', 'Log an outing to start tracking arm safety for ' + esc(player.name) + '.') + '</div>';
+      body += '<div style="margin-top:var(--sp-3);">' +
+        ui.emptyState('clipboard-list', 'No workload logged', 'Log an outing to start tracking arm safety for ' + esc(player.name) + '.') + '</div>';
     }
 
     const title = '<span class="status-dot ' + v.status + '"></span>' + esc(player.name);
-    const actions = '<button class="btn btn-sm btn-primary" data-act="log" data-id="' + esc(player.id) + '">+ Log outing</button>';
+    const actions = '<button class="btn btn-sm btn-primary" data-act="log" data-id="' + esc(player.id) + '"><i data-lucide="plus"></i>Log outing</button>';
     return ui.card({ rawTitle: true, title: title, subtitle: sub, actions: actions, body: body });
   }
 
@@ -295,9 +309,9 @@
 
     if (!players.length) {
       root.innerHTML = ui.pageHead('Arm Safety', 'Pitch Smart workload & ACWR') +
-        ui.emptyState('🛡️', 'No arms to monitor yet',
+        ui.emptyState('shield', 'No arms to monitor yet',
           'Add a pitcher (or log any throwing workload) to see the Pitch Smart clearance console.',
-          '<a class="btn btn-primary" href="#/roster">Go to Roster</a>');
+          '<a class="btn btn-primary" href="#/roster"><i data-lucide="user-plus"></i>Go to Roster</a>');
       return;
     }
 
@@ -306,7 +320,7 @@
       : players.length + ' arm(s) monitored · MLB/USA Baseball Pitch Smart';
 
     let html = ui.pageHead('Arm Safety — Cleared to Pitch?', subtitle);
-    if (focused) html += '<a class="back-link" href="#/armsafety">← All arms</a>';
+    if (focused) html += '<a class="back-link" href="#/armsafety"><i data-lucide="arrow-left"></i>All arms</a>';
     else html += summaryStrip(players);
 
     html += '<div class="grid-cards">' +

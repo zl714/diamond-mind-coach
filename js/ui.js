@@ -131,16 +131,30 @@
   }
 
   function badge(text, tone) {
-    return '<span class="badge" style="' + toneStyle(tone) + ';border-radius:14px;padding:.15rem .55rem;font-size:.72rem;font-weight:700;border:1px solid;">' + esc(text) + '</span>';
+    return '<span class="badge" style="' + toneStyle(tone) + ';border-radius:9999px;padding:2px 8px;font-size:12px;font-weight:600;border:1px solid;">' + esc(text) + '</span>';
   }
 
-  // tone: 'green'|'yellow'|'red'|'neutral' -> bg/color/border CSS
+  // tone -> bg/color/border CSS, built on the design-system tokens.
+  // 'green'/'up' = positive axis, 'red'/'down' = negative axis, 'yellow'/'warn',
+  // 'accent'/'cyan' = brand accent, 'seam' = secondary coral, else neutral.
   function toneStyle(tone) {
     switch (tone) {
-      case 'green': return 'background:rgba(127,255,0,0.15);color:#7FFF00;border-color:rgba(127,255,0,0.4);';
-      case 'red': return 'background:rgba(255,107,107,0.15);color:#ff6b6b;border-color:rgba(255,107,107,0.45);';
-      case 'yellow': return 'background:rgba(255,205,80,0.16);color:#ffcd50;border-color:rgba(255,205,80,0.45);';
-      default: return 'background:rgba(127,255,0,0.10);color:#b8e6b8;border-color:rgba(127,255,0,0.25);';
+      case 'green':
+      case 'up':
+        return 'background:var(--up-soft);color:var(--up);border-color:rgba(22,199,132,0.4);';
+      case 'red':
+      case 'down':
+        return 'background:var(--down-soft);color:var(--down);border-color:rgba(242,54,69,0.45);';
+      case 'yellow':
+      case 'warn':
+        return 'background:var(--warn-soft);color:var(--warn);border-color:rgba(251,191,36,0.45);';
+      case 'accent':
+      case 'cyan':
+        return 'background:var(--accent-soft);color:var(--accent-400);border-color:rgba(0,174,239,0.35);';
+      case 'seam':
+        return 'background:var(--seam-soft,rgba(239,68,68,0.12));color:var(--seam-2,#FB7185);border-color:rgba(251,113,133,0.4);';
+      default:
+        return 'background:rgba(255,255,255,0.06);color:var(--text-secondary);border-color:var(--border);';
     }
   }
 
@@ -148,9 +162,13 @@
     return '<div class="stat"><div class="num">' + esc(num) + '</div><div class="label">' + esc(label) + '</div></div>';
   }
 
+  // emptyState(icon, title, message?, actionHtml?). `icon` is a Lucide icon NAME
+  // (e.g. 'users', 'inbox'); the router repaints icons after render. Non-name
+  // values fall back to 'inbox' (no emoji as functional icons, per design system).
   function emptyState(icon, title, message, actionHtml) {
+    const name = (icon && /^[a-z][a-z0-9-]*$/.test(icon)) ? icon : 'inbox';
     return '<div class="empty">' +
-      '<div class="big">' + (icon || '⚾') + '</div>' +
+      '<div class="big"><i data-lucide="' + name + '"></i></div>' +
       '<h3>' + esc(title || 'Nothing here yet') + '</h3>' +
       (message ? '<p>' + esc(message) + '</p>' : '') +
       (actionHtml || '') + '</div>';

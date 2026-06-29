@@ -1,5 +1,5 @@
-/* views/programs.js — PROGRAMS + DAILY CHECK-IN.
-   Three sub-tabs (mobile-first segmented nav), all on the shared CT foundation:
+/* views/programs.js — PROGRAMS + DAILY CHECK-IN (Diamond Mind, cyan reskin).
+   Three sub-tabs (design-system underline .tabbar), all on the shared CT foundation:
      1) Today      — per-player program tracker: today's planned-vs-completed
                      sessions, warmup/arm-care checkboxes, RPE/soreness inputs,
                      week-index progress, Pitch-Smart status, adherence chart.
@@ -10,7 +10,9 @@
      3) Check-In   — 1-2 tap daily sleep/readiness/soreness/pain. A pain flag over
                      threshold sets armPain (the record the Alerts view reads) and
                      surfaces a medical-referral note.
-   Uses ONLY the documented CT API. Registers via CT.registerView('programs', ...). */
+   Uses ONLY the documented CT API. Registers via CT.registerView('programs', ...).
+   Design system: cyan accent (data-app="diamond-mind"), seam-red for pain/danger,
+   tabular-nums on numbers, Lucide glyphs (no emoji), no green chrome. */
 (function () {
   'use strict';
 
@@ -31,6 +33,8 @@
 
   // ----- small helpers ---------------------------------------------------------
   function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
+
+  function cleanName(name) { return (name || '').replace(/^Demo — /, ''); }
 
   function programById(programId) { return store.getById('programs', programId); }
 
@@ -58,19 +62,33 @@
     return Math.max(0, Math.min(program.weeks - 1, Math.floor(diffDays / 7)));
   }
 
+  // Pitch-Smart clearance as a color+glyph+text badge (never color alone), mirroring
+  // the roster reference. Green here is the semantic safety axis, not chrome.
   function clearanceBadge(player) {
     const logs = store.byPlayer('workloadLogs', player.id);
     if (!isPitcher(player) && !logs.length) return '';
     const v = pitchsmart.evaluate(player, logs);
-    let label;
-    if (v.status === 'red') label = v.daysUntilEligible > 0 ? 'Rest ' + v.daysUntilEligible + 'd' : 'Not cleared';
-    else if (v.status === 'yellow') label = 'Caution';
-    else label = 'Cleared';
-    return '<span class="status-dot ' + v.status + '"></span><span style="font-size:.8rem;color:var(--body-2);font-weight:700;">Pitch Smart: ' + esc(label) + '</span>';
+    let tone, icon, label;
+    if (v.status === 'red') {
+      tone = 'red'; icon = 'x-circle';
+      label = v.daysUntilEligible > 0 ? 'Rest ' + v.daysUntilEligible + 'd' : 'Not cleared';
+    } else if (v.status === 'yellow') {
+      tone = 'yellow'; icon = 'alert-triangle'; label = 'Caution';
+    } else {
+      tone = 'green'; icon = 'check-circle'; label = 'Cleared';
+    }
+    return '<span class="badge pgm-clearance" style="' + ui.toneStyle(tone) +
+      ';border-radius:9999px;padding:2px 8px;font-size:var(--fs-label);font-weight:var(--fw-semibold);border:1px solid;">' +
+      '<i data-lucide="' + icon + '"></i>Pitch Smart: ' + esc(label) + '</span>';
   }
 
   function painFlagged(checkIn) {
     return !!(checkIn && (checkIn.armPain || (checkIn.soreness != null && checkIn.soreness >= 8)));
+  }
+
+  // Re-usable medical-referral callout (seam-red, paired with a glyph + text).
+  function referralBlock(text) {
+    return '<div class="pgm-referral"><i data-lucide="shield-alert"></i><span>' + esc(text) + '</span></div>';
   }
 
   // =====================================================================
@@ -78,24 +96,23 @@
   // =====================================================================
   function sessionRow(session, program) {
     const done = session.completed;
-    const tone = done ? 'green' : 'neutral';
     return '<div class="pgm-session" data-sid="' + esc(session.id) + '">' +
       '<div class="pgm-session-top">' +
         '<div><strong>' + esc(program ? program.name : 'Program') + '</strong>' +
-          ' <span class="muted" style="font-size:.78rem;">· week ' + (session.weekIndex + 1) + '</span></div>' +
-        ui.pill(done ? 'Completed' : 'Planned', tone) +
+          ' <span class="muted" style="font-size:var(--fs-label);">· week <span class="num">' + (session.weekIndex + 1) + '</span></span></div>' +
+        ui.pill(done ? 'Completed' : 'Planned', done ? 'green' : 'neutral') +
       '</div>' +
       '<div class="pgm-checks">' +
         '<label class="pgm-check"><input type="checkbox" data-act="warmup" data-sid="' + esc(session.id) + '"' + (session.warmupDone ? ' checked' : '') + ' /> Warm-up</label>' +
         '<label class="pgm-check"><input type="checkbox" data-act="armcare" data-sid="' + esc(session.id) + '"' + (session.armCareDone ? ' checked' : '') + ' /> Arm-care</label>' +
       '</div>' +
       '<div class="pgm-inputs">' +
-        '<label>RPE<input class="input" type="number" inputmode="decimal" min="0" max="10" step="1" data-act="rpe" data-sid="' + esc(session.id) + '" value="' + (session.rpe == null ? '' : esc(session.rpe)) + '" /></label>' +
-        '<label>Soreness<input class="input" type="number" inputmode="decimal" min="0" max="10" step="1" data-act="soreness" data-sid="' + esc(session.id) + '" value="' + (session.soreness == null ? '' : esc(session.soreness)) + '" /></label>' +
+        '<label>RPE<input class="input num" type="number" inputmode="decimal" min="0" max="10" step="1" data-act="rpe" data-sid="' + esc(session.id) + '" value="' + (session.rpe == null ? '' : esc(session.rpe)) + '" /></label>' +
+        '<label>Soreness<input class="input num" type="number" inputmode="decimal" min="0" max="10" step="1" data-act="soreness" data-sid="' + esc(session.id) + '" value="' + (session.soreness == null ? '' : esc(session.soreness)) + '" /></label>' +
       '</div>' +
-      '<div class="row" style="margin-top:.5rem;">' +
+      '<div class="row" style="margin-top:var(--sp-2);">' +
         '<button class="btn btn-sm ' + (done ? 'btn-ghost' : 'btn-primary') + '" data-act="toggle" data-sid="' + esc(session.id) + '">' +
-          (done ? 'Mark not done' : 'Mark done') + '</button>' +
+          '<i data-lucide="' + (done ? 'rotate-ccw' : 'check') + '"></i>' + (done ? 'Mark not done' : 'Mark done') + '</button>' +
       '</div>' +
     '</div>';
   }
@@ -118,35 +135,36 @@
 
     const adhPct = totalDue ? Math.round((totalDone / totalDue) * 100) : null;
     const todayDone = allSessions.filter(function (x) { return x.s.completed; }).length;
+    const clearance = clearanceBadge(player);
 
     let body =
       '<div class="player-card">' +
         '<div class="avatar">' + esc(CT.initials(player.name)) + '</div>' +
         '<div class="meta">' +
-          '<div class="name">' + esc(player.name) + '</div>' +
+          '<div class="name">' + esc(cleanName(player.name)) + '</div>' +
           '<div class="sub">' + esc(player.ageBand || model.ageBandFromBirthdate(player.birthdate) || '—') + ' · ' + esc(player.level || 'youth') + '</div>' +
-          (clearanceBadge(player) ? '<div class="sub">' + clearanceBadge(player) + '</div>' : '') +
+          (clearance ? '<div class="sub" style="margin-top:var(--sp-1);">' + clearance + '</div>' : '') +
         '</div>' +
-        '<div style="text-align:right;">' +
-          '<div style="color:var(--accent);font-weight:800;font-size:1.3rem;">' + (adhPct == null ? '—' : adhPct + '%') + '</div>' +
-          '<div class="muted" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.4px;">Adherence</div>' +
+        '<div class="pgm-adherence">' +
+          '<div class="v num">' + (adhPct == null ? '—' : adhPct + '%') + '</div>' +
+          '<div class="k">Adherence</div>' +
         '</div>' +
       '</div>';
 
     if (!assigns.length) {
-      body += '<p class="muted" style="margin:.7rem 0 0;font-size:.88rem;">No active programs. Assign one in the Programs tab.</p>';
+      body += '<p class="pgm-note">No active programs. Assign one in the Programs tab.</p>';
     } else {
-      body += '<div class="muted" style="margin:.6rem 0 .2rem;font-size:.82rem;">' + weeksLine.join(' · ') + '</div>';
+      body += '<div class="pgm-weeks">' + weeksLine.join(' · ') + '</div>';
       if (!allSessions.length) {
-        body += '<p class="muted" style="font-size:.88rem;">No sessions scheduled today (rest or overlay-only).</p>';
+        body += '<p class="pgm-note">No sessions scheduled today (rest or overlay-only).</p>';
       } else {
-        body += '<div class="muted" style="font-size:.82rem;margin-bottom:.4rem;">Today: ' + todayDone + '/' + allSessions.length + ' done</div>';
+        body += '<div class="pgm-note" style="margin-bottom:var(--sp-1);">Today: <span class="num">' + todayDone + '</span>/<span class="num">' + allSessions.length + '</span> done</div>';
         body += allSessions.map(function (x) { return sessionRow(x.s, x.prog); }).join('');
       }
     }
 
-    body += '<div class="row" style="margin-top:.7rem;">' +
-      '<button class="btn btn-sm" data-act="quick-checkin" data-pid="' + esc(player.id) + '">Daily check-in</button>' +
+    body += '<div class="row" style="margin-top:var(--sp-3);">' +
+      '<button class="btn btn-sm" data-act="quick-checkin" data-pid="' + esc(player.id) + '"><i data-lucide="clipboard-check"></i>Daily check-in</button>' +
       '</div>';
 
     return ui.card({ body: body });
@@ -160,9 +178,9 @@
     });
 
     if (!withPrograms.length) {
-      html += ui.emptyState('🗓️', 'No active program assignments',
+      html += ui.emptyState('calendar-days', 'No active program assignments',
         'Assign a program in the Programs tab to start tracking daily sessions.',
-        '<button class="btn btn-primary" data-act="go-builder">Go to Programs</button>');
+        '<button class="btn btn-primary" data-act="go-builder"><i data-lucide="arrow-right"></i>Go to Programs</button>');
     } else {
       // Adherence chart across players with programs.
       html += ui.card({
@@ -170,14 +188,14 @@
         subtitle: 'Completed vs. due sessions per player (team process, not a leaderboard)',
         body: '<div class="chart-wrap"><canvas id="pgm-adherence"></canvas></div>'
       });
-      html += '<div class="grid-cards" style="margin-top:1rem;">' +
+      html += '<div class="grid-cards" style="margin-top:var(--sp-4);">' +
         withPrograms.map(function (p) { return todayPlayerCard(p); }).join('') + '</div>';
     }
     root.querySelector('#pgm-body').innerHTML = html;
 
     wireTodayEvents(root);
 
-    // Draw adherence chart.
+    // Draw adherence chart — bars colored on the Savant percentile scale.
     const canvas = root.querySelector('#pgm-adherence');
     if (canvas) {
       const labels = [], data = [];
@@ -188,11 +206,14 @@
           const adh = adherence(sessionsForAssignment(a.id));
           due += adh.due; done += adh.done;
         });
-        labels.push(p.name.replace(/^Demo — /, ''));
+        labels.push(cleanName(p.name));
         data.push(due ? Math.round((done / due) * 100) : 0);
       });
-      charts.bar(canvas, { labels: labels, data: data, label: 'Adherence %',
-        options: { scales: { y: { min: 0, max: 100 } } } });
+      charts.bar(canvas, {
+        labels: labels, data: data, label: 'Adherence %',
+        colors: data.map(function (v) { return charts.savantColor(v); }),
+        options: { scales: { y: { min: 0, max: 100 } } }
+      });
     }
   }
 
@@ -250,7 +271,7 @@
       const age = model.ageFromBirthdate(p.birthdate);
       return '<label class="pgm-pick' + (elig.eligible ? '' : ' pgm-pick-blocked') + '">' +
         '<input type="checkbox" data-pick="' + esc(p.id) + '"' + (checked ? ' checked' : '') + (elig.eligible ? '' : ' disabled') + ' /> ' +
-        '<span class="pgm-pick-name">' + esc(p.name.replace(/^Demo — /, '')) + ' <span class="muted">(' + (age != null ? age + 'y · ' : '') + esc(p.ageBand || '—') + ')</span></span>' +
+        '<span class="pgm-pick-name">' + esc(cleanName(p.name)) + ' <span class="muted">(' + (age != null ? age + 'y · ' : '') + esc(p.ageBand || '—') + ')</span></span>' +
         '<span class="pgm-pick-status">' + ui.pill(elig.eligible ? 'OK' : 'Blocked', tone) + '</span>' +
         '<span class="pgm-pick-reason muted">' + esc(elig.reason) + '</span>' +
       '</label>';
@@ -265,15 +286,15 @@
 
     const html =
       ui.formField({ type: 'select', name: 'templateId', label: 'Program template', options: tplOptions, value: firstTpl.templateId }) +
-      '<div id="tpl-desc" class="help" style="margin-top:-.4rem;margin-bottom:.8rem;"></div>' +
+      '<div id="tpl-desc" class="help" style="margin-top:calc(-1 * var(--sp-2));margin-bottom:var(--sp-3);"></div>' +
       ui.formField({ type: 'date', name: 'startDate', label: 'Start date', value: CT.todayISO(), required: true }) +
       '<div class="field"><label>Assign to players</label>' +
-        '<div class="help" style="margin-bottom:.4rem;">Age-gated programs are blocked for ineligible players with a reason.</div>' +
+        '<div class="help" style="margin-bottom:var(--sp-2);">Age-gated programs are blocked for ineligible players with a reason.</div>' +
         '<div id="pick-list" class="pgm-picks">' + eligibilityPreview(firstTpl.templateId, []) + '</div>' +
       '</div>' +
       '<div class="modal-actions">' +
         '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
-        '<button class="btn btn-primary" data-act="assign">Assign program</button>' +
+        '<button class="btn btn-primary" data-act="assign"><i data-lucide="check"></i>Assign program</button>' +
       '</div>';
 
     ui.openModal('Assign a program', html, function (modal, close) {
@@ -288,11 +309,12 @@
       function refreshDesc() {
         const t = programs.byTemplateId(sel.value);
         let txt = t ? t.description : '';
-        if (t && t.clinicianRequired) txt += ' ⚠ Clinician supervision REQUIRED.';
+        if (t && t.clinicianRequired) txt += ' Clinician supervision REQUIRED.';
         desc.textContent = txt;
       }
       function refreshPicks() {
         pickList.innerHTML = eligibilityPreview(sel.value, selectedIds());
+        if (window.lucide) window.lucide.createIcons();
       }
       refreshDesc();
       sel.addEventListener('change', function () { refreshDesc(); refreshPicks(); });
@@ -335,23 +357,23 @@
     const completedTotal = sessions.filter(function (s) { return s.completed; }).length;
 
     let body =
-      '<div style="display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start;">' +
-        '<div><div style="color:var(--heading);font-weight:700;">' + esc(program.name) + '</div>' +
-          '<div class="muted" style="font-size:.85rem;">' + esc(player.name.replace(/^Demo — /, '')) + ' · ' + esc(program.category) + '</div></div>' +
-        ui.pill(esc(assignment.status), assignment.status === 'active' ? 'green' : 'neutral') +
+      '<div style="display:flex;justify-content:space-between;gap:var(--sp-2);align-items:flex-start;">' +
+        '<div><div style="color:var(--text-hi);font-weight:var(--fw-semibold);">' + esc(program.name) + '</div>' +
+          '<div class="muted" style="font-size:var(--fs-data);">' + esc(cleanName(player.name)) + ' · ' + esc(program.category) + '</div></div>' +
+        ui.pill(assignment.status, assignment.status === 'active' ? 'accent' : 'neutral') +
       '</div>' +
-      '<div class="kpi-grid" style="margin-top:.7rem;grid-template-columns:repeat(3,1fr);">' +
-        '<div class="kpi"><div class="k">Week</div><div class="v" style="font-size:1rem;">' + (wk + 1) + '/' + program.weeks + '</div></div>' +
-        '<div class="kpi"><div class="k">Sessions done</div><div class="v" style="font-size:1rem;">' + completedTotal + '/' + sessions.length + '</div></div>' +
-        '<div class="kpi"><div class="k">Adherence</div><div class="v" style="font-size:1rem;">' + (adh.pct == null ? '—' : adh.pct + '%') + '</div></div>' +
+      '<div class="kpi-grid" style="margin-top:var(--sp-3);grid-template-columns:repeat(3,1fr);">' +
+        '<div class="kpi"><div class="k">Week</div><div class="v num">' + (wk + 1) + '/' + program.weeks + '</div></div>' +
+        '<div class="kpi"><div class="k">Sessions done</div><div class="v num">' + completedTotal + '/' + sessions.length + '</div></div>' +
+        '<div class="kpi"><div class="k">Adherence</div><div class="v num">' + (adh.pct == null ? '—' : adh.pct + '%') + '</div></div>' +
       '</div>' +
-      (program.clinicianRequired ? '<div class="muted" style="margin-top:.5rem;font-size:.82rem;color:var(--danger);">⚠ Clinician-supervised program — confirm clearance.</div>' : '') +
-      (program.sessionsPerWeek === 0 ? '<div class="muted" style="margin-top:.5rem;font-size:.82rem;">Compliance overlay — no scheduled sessions; tracked via Pitch Smart.</div>' : '') +
-      '<div class="row" style="margin-top:.7rem;">' +
+      (program.clinicianRequired ? referralBlock('Clinician-supervised program — confirm clearance before progressing.') : '') +
+      (program.sessionsPerWeek === 0 ? '<div class="pgm-note">Compliance overlay — no scheduled sessions; tracked via Pitch Smart.</div>' : '') +
+      '<div class="row" style="margin-top:var(--sp-3);">' +
         (assignment.status === 'active'
-          ? '<button class="btn btn-sm" data-act="pause" data-id="' + esc(assignment.id) + '">Pause</button>'
-          : '<button class="btn btn-sm" data-act="resume" data-id="' + esc(assignment.id) + '">Resume</button>') +
-        '<button class="btn btn-sm btn-danger" data-act="unassign" data-id="' + esc(assignment.id) + '">Remove</button>' +
+          ? '<button class="btn btn-sm" data-act="pause" data-id="' + esc(assignment.id) + '"><i data-lucide="pause"></i>Pause</button>'
+          : '<button class="btn btn-sm" data-act="resume" data-id="' + esc(assignment.id) + '"><i data-lucide="play"></i>Resume</button>') +
+        '<button class="btn btn-sm btn-danger" data-act="unassign" data-id="' + esc(assignment.id) + '"><i data-lucide="trash-2"></i>Remove</button>' +
       '</div>';
 
     return ui.card({ body: body });
@@ -363,13 +385,13 @@
       ui.card({
         title: 'Assign a training program',
         subtitle: 'Templates are age-gated — weighted-ball / HS+ work is blocked for youth.',
-        body: '<p class="muted" style="font-size:.9rem;">Pick a template, set a start date, and assign to one or many players. Dated weekly sessions are generated automatically.</p>' +
-          '<button class="btn btn-primary" data-act="assign-new">+ Assign program</button>'
+        body: '<p class="muted" style="font-size:var(--fs-sm);">Pick a template, set a start date, and assign to one or many players. Dated weekly sessions are generated automatically.</p>' +
+          '<button class="btn btn-primary" data-act="assign-new"><i data-lucide="plus"></i>Assign program</button>'
       });
 
-    html += '<div style="margin-top:1rem;"><h2 style="margin-bottom:.6rem;">Active assignments</h2>';
+    html += '<div style="margin-top:var(--sp-4);"><h2 style="margin-bottom:var(--sp-3);">Active assignments</h2>';
     if (!assigns.length) {
-      html += ui.emptyState('📋', 'No programs assigned yet', 'Assign your first program above.');
+      html += ui.emptyState('clipboard-list', 'No programs assigned yet', 'Assign your first program above.');
     } else {
       html += '<div class="grid-cards">' + assigns.map(function (a) { return assignmentCard(a); }).join('') + '</div>';
     }
@@ -404,7 +426,7 @@
   function openCheckIn(presetPlayer) {
     const players = store.getPlayers();
     if (!players.length) { ui.toast('Add players first (Roster).'); return; }
-    const playerOptions = players.map(function (p) { return { value: p.id, label: p.name.replace(/^Demo — /, '') }; });
+    const playerOptions = players.map(function (p) { return { value: p.id, label: cleanName(p.name) }; });
 
     const html =
       ui.formField({ type: 'select', name: 'playerId', label: 'Player', options: playerOptions, value: presetPlayer ? presetPlayer.id : players[0].id }) +
@@ -420,7 +442,7 @@
       '<div id="pain-note"></div>' +
       '<div class="modal-actions">' +
         '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
-        '<button class="btn btn-primary" data-act="save">Save check-in</button>' +
+        '<button class="btn btn-primary" data-act="save"><i data-lucide="clipboard-check"></i>Save check-in</button>' +
       '</div>';
 
     ui.openModal('Daily check-in', html, function (modal, close) {
@@ -428,9 +450,12 @@
       const note = modal.querySelector('#pain-note');
       function refreshNote() {
         const v = Number(painInput.value);
-        note.innerHTML = (painInput.value !== '' && v >= PAIN_THRESHOLD)
-          ? '<div class="pgm-referral">⚠ Arm pain ' + v + '/10 — shut down throwing and refer to a sports-medicine clinician before returning. This creates a pain alert (see Alerts).</div>'
-          : '';
+        if (painInput.value !== '' && v >= PAIN_THRESHOLD) {
+          note.innerHTML = referralBlock('Arm pain ' + v + '/10 — shut down throwing and refer to a sports-medicine clinician before returning. This creates a pain alert (see Alerts).');
+          if (window.lucide) window.lucide.createIcons();
+        } else {
+          note.innerHTML = '';
+        }
       }
       painInput.addEventListener('input', refreshNote);
 
@@ -464,11 +489,11 @@
     const player = store.getPlayer(c.playerId);
     const flagged = painFlagged(c);
     return '<tr>' +
-      '<td>' + esc(player ? player.name.replace(/^Demo — /, '') : '—') + '</td>' +
+      '<td>' + esc(player ? cleanName(player.name) : '—') + '</td>' +
       '<td>' + esc(CT.relativeDate(c.date)) + '</td>' +
-      '<td>' + (c.sleepHours == null ? '—' : esc(c.sleepHours) + 'h') + '</td>' +
-      '<td>' + (c.mood == null ? '—' : esc(c.mood) + '/5') + '</td>' +
-      '<td>' + (c.soreness == null ? '—' : esc(c.soreness) + '/10') + '</td>' +
+      '<td class="num">' + (c.sleepHours == null ? '—' : esc(c.sleepHours) + 'h') + '</td>' +
+      '<td class="num">' + (c.mood == null ? '—' : esc(c.mood) + '/5') + '</td>' +
+      '<td class="num">' + (c.soreness == null ? '—' : esc(c.soreness) + '/10') + '</td>' +
       '<td>' + (flagged ? ui.pill(c.painLocation ? 'Pain · ' + c.painLocation : 'Pain', 'red') : '<span class="muted">—</span>') + '</td>' +
     '</tr>';
   }
@@ -480,18 +505,20 @@
     let html = ui.card({
       title: 'Daily check-in',
       subtitle: '1-2 tap sleep · readiness · soreness · pain',
-      body: '<p class="muted" style="font-size:.9rem;">Quick daily wellness log. Arm pain at ' + PAIN_THRESHOLD + '/10 or above auto-escalates to a pain alert with a medical-referral note.</p>' +
-        '<button class="btn btn-primary" data-act="new-checkin">+ New check-in</button>'
+      body: '<p class="muted" style="font-size:var(--fs-sm);">Quick daily wellness log. Arm pain at ' + PAIN_THRESHOLD + '/10 or above auto-escalates to a pain alert with a medical-referral note.</p>' +
+        '<button class="btn btn-primary" data-act="new-checkin"><i data-lucide="plus"></i>New check-in</button>'
     });
 
     if (flagged.length) {
-      html += '<div class="pgm-referral" style="margin-top:1rem;">⚠ ' + flagged.length + ' active pain flag(s). Per youth-safety protocol: stop throwing and refer to a sports-medicine clinician. See the Alerts tab for the full list.</div>';
+      html += '<div style="margin-top:var(--sp-4);">' +
+        referralBlock(flagged.length + ' active pain flag(s). Per youth-safety protocol: stop throwing and refer to a sports-medicine clinician. See the Alerts tab for the full list.') +
+        '</div>';
     }
 
-    html += '<div style="margin-top:1rem;">' + ui.card({
+    html += '<div style="margin-top:var(--sp-4);">' + ui.card({
       title: 'Recent check-ins',
       body: all.length
-        ? '<div class="table-wrap"><table class="ct-table"><thead><tr><th>Player</th><th>When</th><th>Sleep</th><th>Ready</th><th>Soreness</th><th>Pain</th></tr></thead><tbody>' +
+        ? '<div class="table-wrap"><table class="ct-table"><thead><tr><th>Player</th><th>When</th><th class="num">Sleep</th><th class="num">Ready</th><th class="num">Soreness</th><th>Pain</th></tr></thead><tbody>' +
             all.slice(0, 20).map(checkInRow).join('') + '</tbody></table></div>'
         : '<p class="muted">No check-ins yet.</p>'
     }) + '</div>';
@@ -509,21 +536,42 @@
 
     const players = store.getPlayers();
     const activeCount = activeAssignments().length;
+    const onProgram = players.filter(function (p) {
+      return store.byPlayer('programAssignments', p.id).some(function (a) { return a.status !== 'completed'; });
+    }).length;
     const painCount = store.all('dailyCheckIns').filter(painFlagged).length;
+
+    // Team-wide adherence across all active assignments (the "is everything OK?" number).
+    let teamDue = 0, teamDone = 0;
+    activeAssignments().forEach(function (a) {
+      const adh = adherence(sessionsForAssignment(a.id));
+      teamDue += adh.due; teamDone += adh.done;
+    });
+    const teamAdh = teamDue ? Math.round((teamDone / teamDue) * 100) : null;
+
     const subtitle = activeCount + ' active program(s)' + (painCount ? ' · ' + painCount + ' pain flag(s)' : '');
 
-    let nav = '<div class="pgm-tabs">' + TABS.map(function (t) {
-      return '<button class="pgm-tab' + (state.tab === t.id ? ' active' : '') + '" data-tab="' + t.id + '">' + esc(t.label) + '</button>';
+    let nav = '<div class="tabbar">' + TABS.map(function (t) {
+      return '<button class="tabbar-item' + (state.tab === t.id ? ' active' : '') + '" data-tab="' + t.id + '">' + esc(t.label) + '</button>';
     }).join('') + '</div>';
 
-    root.innerHTML = ui.pageHead('Programs & Check-In', subtitle) + nav + '<div id="pgm-body"></div>';
+    let hero = '';
+    if (players.length) {
+      hero = '<div class="stats">' +
+        ui.statTile(teamAdh == null ? '—' : teamAdh + '%', 'Team adherence') +
+        ui.statTile(activeCount + ' / ' + onProgram, 'Programs / players') +
+        ui.statTile(painCount, 'Pain flags') +
+        '</div>';
+    }
+
+    root.innerHTML = ui.pageHead('Programs & Check-In', subtitle) + nav + hero + '<div id="pgm-body"></div>';
 
     root.querySelectorAll('[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { state.tab = b.getAttribute('data-tab'); CT.router.route(); });
     });
 
     if (!players.length) {
-      root.querySelector('#pgm-body').innerHTML = ui.emptyState('⚾', 'No players yet',
+      root.querySelector('#pgm-body').innerHTML = ui.emptyState('users', 'No players yet',
         'Add players in the Roster tab, then assign programs and log check-ins here.');
       return;
     }

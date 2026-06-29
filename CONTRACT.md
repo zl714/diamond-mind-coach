@@ -1,4 +1,12 @@
-# Coach Tracker — Foundation Contract (read before building a view)
+# Diamond Mind — Foundation Contract (read before building a view)
+
+> **Brand/design:** This app is **Diamond Mind**. `<html data-app="diamond-mind">`
+> sets the accent to logo **cyan `#00AEEF`**; baseball-red **seam `#EF4444`** / coral
+> `#FB7185` is the SECONDARY data accent only. Follow `DESIGN_SYSTEM.md` exactly
+> (Geist + Geist Mono + Lucide via CDN, navy near-black surfaces, slate text,
+> `tabular-nums` on every numeric cell, 4px spacing grid, ONE accent + separate
+> up/down axis, color+glyph never color-alone, no emoji icons). The old green
+> theme is gone — never reintroduce `#7FFF00`/lime.
 
 This documents the shared foundation every feature view sits on. Phase-2 agents
 build the 7 remaining views by **replacing the placeholder file** in `js/views/`
@@ -67,7 +75,8 @@ persist + notify subscribers. On first load it seeds clearly-labeled demo data.
 Collections (`CT.store.COLLECTION_NAMES`):
 `teams, seasons, players, anthroReadings, assessmentSessions, metricReadings,
 games, battingStatLines, pitchingAppearances, fieldingStatLines, workloadLogs,
-dailyCheckIns, programs, programAssignments, programSessions, benchmarks`.
+dailyCheckIns, programs, programAssignments, programSessions, drills, lessons,
+benchmarks`.
 
 **Append-only** (`CT.store.APPEND_ONLY`): `metricReadings`, `workloadLogs`.
 `update()` throws on these — corrections add a NEW row (use `append`, set
@@ -86,6 +95,12 @@ store.getPlayer(id)                    -> player | null
 store.latestMetric(playerId, metricKey, context?) -> newest non-voided MetricReading | null
 store.lastAssessmentDate(playerId)     -> 'yyyy-mm-dd' | null
 store.isUsingSample()                  -> bool (demo badge)
+// Drill library + lessons (coaching-session workflow)
+store.drillLibrary()                   -> all drills, sorted by category then name
+store.getDrill(id)                     -> Drill | null
+store.drillsByCategory(cat)            -> Drill[] (cat ∈ model.DRILL_CATEGORIES)
+store.getLesson(id)                    -> Lesson | null
+store.lessonsForPlayer(playerId)       -> Lesson[] newest-first (timeline order)
 store.subscribe(fn)                    -> unsubscribe fn (called with state on every commit)
 ```
 
@@ -95,7 +110,10 @@ store.insert(collection, data)         -> normalized record (factory-applied)
 store.append(collection, data)         -> same as insert; use for append-only intent
 store.update(collection, id, patch)    -> updated record (NOT for append-only)
 store.remove(collection, id)           -> void (hard delete)
-store.deletePlayerCascade(playerId)    -> deletes player + all child records
+store.deletePlayerCascade(playerId)    -> deletes player + all child records (incl. lessons)
+// Lesson writers (append-only-friendly: drag-drop reorder + notes-by-id)
+store.setLessonDrills(lessonId, ids[]) -> persist reordered drillIds (call from Sortable onEnd)
+store.setLessonNotes(lessonId, body)   -> persist notes keyed on the STABLE lesson id
 ```
 
 ### Bulk
@@ -141,6 +159,17 @@ Factories & key fields (all have `id`, most have `createdAt`):
 - **ProgramAssignment**: `playerId, programId, startDate, status('active'|'completed'|'paused'), notes`.
 - **ProgramSession**: `assignmentId, playerId, programId, date, weekIndex, planned,
   completed, warmupDone, armCareDone, rpe, soreness, notes`.
+- **Drill** (coach-managed library): `name, category, defaultNotes`. `category` ∈
+  `model.DRILL_CATEGORIES` = `['Hitting','Pitching','Fielding','Baserunning','Strength','Mobility']`
+  (defaults to `'Hitting'` if invalid). The **DrillLibrary** is simply the `drills`
+  collection; drills are referenced (cloned by id) into a Lesson's `drillIds`.
+- **Lesson** (a coaching session): `playerId, date, drillIds[] (ORDERED Drill ids),
+  notes (rich session note), quickStats ({metricKey:value} map), ratingDelta (number|null)`.
+  `notes` is carried by the **stable lesson id** — never a board position — so it
+  follows the lesson through any drag/reorder. `quickStats` keys should be
+  `model.METRIC_BY_KEY` keys (e.g. `exitVeloMax`, `fastballVelo`, `sixtyYard`);
+  non-numeric values are dropped on normalize. Use `store.setLessonDrills` /
+  `store.setLessonNotes` to mutate; both go through the normal immutable `update`.
 - **Benchmark**: `ageBand, metricKey, unit, p10, p25, p50, p75, p90, source`.
 - **Team**: `name, ageBand, level, season`. **Season**: `name, year, startDate, endDate, level`.
 
@@ -276,12 +305,32 @@ ui.confirmDialog(title, message, confirmLabel, onConfirm)
 Read form values in `onMount` via `modal.querySelector('[name="field"]').value`.
 For `select`, `options` accepts `['a','b']` or `[{value,label}]`.
 
-CSS classes available: `.btn .btn-primary .btn-ghost .btn-danger .btn-sm .btn-block`,
-`.card .clickable`, `.grid-cards`, `.kpi-grid .kpi`, `.kv-row`, `.stats .stat`,
-`.pill`, `.status-dot.green|.yellow|.red`, `.ct-table` (+ `.table-wrap`),
-`.field .field-row`, `.chart-wrap` (280px tall canvas container), `.empty`.
-Theme vars: `--bg #0d1b0e, --panel #162d1a, --accent #7FFF00, --accent-hover #9FFF40,
---heading #f1f5f9, --body #b8e6b8, --danger #ff6b6b`. Mobile-first, 44px tap targets.
+**Design-system class conventions (use these — do NOT hand-roll inline color):**
+`.btn .btn-primary .btn-ghost .btn-danger .btn-sm .btn-block`, `.card .clickable`,
+`.grid-cards`, `.kpi-grid .kpi`, `.kv-row`, `.stats .stat`, `.pill`, `.badge`,
+`.status-dot.green|.yellow|.red`, `.ct-table` (+ `.table-wrap`; add class `num` to
+numeric `<td>/<th>` for right-align + tabular figures), `.field .field-row`,
+`.tabbar .tabbar-item.active` (underline tabs), `.chart-wrap` (280px canvas box),
+`.empty`, `.pct-bar > span` (Savant percentile bar), `.timeline .session-card`,
+`.sortable-ghost/.sortable-chosen/.sortable-drag/.drag-handle/.sr-only` (drag-drop).
+- `ui.statTile/ui.pill/ui.badge/ui.toneStyle` tones: `green|up`, `red|down`,
+  `yellow|warn`, `accent|cyan`, `seam`, else neutral — all token-backed. Pair
+  color + glyph + text (Lucide `<i data-lucide>`) — never color alone.
+- Lucide icons: emit `<i data-lucide="name">`; the **router repaints icons after
+  every render** (`lucide.createIcons()`), so you don't call it yourself.
+- `ui.emptyState(iconName, …)` takes a **Lucide icon name** (e.g. `'users'`,
+  `'inbox'`), not an emoji.
+
+**Design tokens (`DESIGN_SYSTEM.md` `:root`)** — surfaces `--bg-base/--bg-sunken/
+--surface-1..4`; text `--text-hi/-strong/-body/-secondary/-muted`; accent
+`--accent-300..600` (cyan) + `--accent-soft`; axis `--up/--down/--warn` (+ `*-soft`);
+Savant `--pct-hot/-mid/-cold`; `--seam/--seam-2`; spacing `--sp-1..16` (4px grid);
+radii `--r-chip/-control/-card/-panel/-modal/-pill`; type `--fs-*`, `--fw-*`; fonts
+`--font-ui` (Geist) / `--font-mono` (Geist Mono). A **legacy alias layer** maps the
+old names (`--accent → --accent-500`, `--panel → --surface-2`, `--body-2 →
+--text-secondary`, `--danger → --down`, etc.) onto tokens so existing `var(--…)`
+keeps working — prefer the new token names in new code. Mobile-first; the desktop
+sidebar rail collapses to a bottom tab bar + elevated center '+' under 768px.
 
 ---
 
@@ -293,10 +342,19 @@ on navigation. Degrades gracefully if the CDN is offline.
 charts.line(canvas, { labels, datasets:[{label, data, color?, fill?}], options? })
 charts.bar(canvas, { labels, data, label?, colors?, options? })
 charts.scatter(canvas, { points:[{x,y}], label?, pointColors?, options? })
-charts.make(canvas, chartJsConfig)     -> generic; merges dark-green theme into options
-charts.THEME                            -> { accent, accentFill, text, tick, grid, danger, warn }
+charts.make(canvas, chartJsConfig)     -> generic; merges DM cyan theme into options
+charts.THEME                            -> { accent (cyan), accentFill, seam, seam2,
+                                            text, tick, grid, panel, border, up, down,
+                                            danger, warn, pctHot, pctMid, pctCold }
+charts.savantColor(pct)                 -> rgb() on the Savant diverging scale (0..100)
+                                           — use for percentile/tool bars
+charts.directionColor(net)              -> THEME.up if net>=0 else THEME.down
+                                           — Robinhood-style trend coloring
 charts.destroyAll()                     -> (router calls this; call if you redraw in place)
 ```
+Series default to **cyan** (`THEME.accent`); use `THEME.seam`/`seam2` as the second
+data accent, the `up`/`down` axis for signed deltas, and `savantColor()` for
+percentile bars. Never reintroduce green chrome.
 For a metric-over-time line, sort `store.byPlayer('metricReadings', id)` for a
 `metricKey`/`context` by `date`, then feed labels = `CT.formatDate(r.date)`.
 
@@ -308,6 +366,48 @@ calls `onDone`. The top nav already wires Export/Import/Reset buttons — you us
 don't need these in a view.
 
 ---
+
+## 11. Drill / Lesson workflow + SortableJS drag-drop (drills view + profile)
+
+The drills view assigns **Drills** from the coach-managed library into a player's
+**Lesson** (coaching session) by drag-drop. Use **SortableJS** (loaded via CDN in
+`index.html`) — NOT native HTML5 DnD (silently dead on touch, no keyboard path).
+
+**Clone-from-library pattern:**
+```js
+// Library list: drag ASSIGNS A COPY, library stays intact.
+new Sortable(libraryEl, {
+  group: { name: 'board', pull: 'clone', put: false },
+  sort: false,
+  animation: 150, handle: '.drag-handle',
+  delay: 120, delayOnTouchOnly: true   // swipes still scroll
+});
+// Each session column shares the board group (accepts clones + reorders).
+new Sortable(sessionColEl, {
+  group: 'board', animation: 150, handle: '.drag-handle',
+  delay: 120, delayOnTouchOnly: true,
+  onEnd: function () { CT.store.setLessonDrills(lessonId, col.toArray()); }
+});
+```
+- Every draggable row carries `data-id="<drillId>"`; persist on `onEnd` via
+  `col.toArray()` (array of `data-id`s) → `store.setLessonDrills(lessonId, ids)`.
+- Style hooks already in CSS: `.sortable-ghost` (faint + accent-soft),
+  `.sortable-chosen` (2px accent ring), `.sortable-drag`, `.drag-handle`.
+- **WCAG 2.5.7 fallback (required):** every drill row ALSO needs visible
+  "Move up / Move down" buttons + an "Assign to session…" menu, and an
+  `aria-live="polite"` `.sr-only` region announcing pickup / "Moved to position 2
+  of 5" / "Dropped into <session>".
+
+**Per-session notes keyed on a STABLE id:** store notes via
+`store.setLessonNotes(lessonId, body)` — they live on the Lesson record's `id`,
+**never a board/column position**, so a note follows its lesson regardless of how
+drills are dragged. Use an inline low-chrome auto-growing textarea, debounced
+autosave (~500ms) + on blur, Cmd/Ctrl+Enter to commit, with a quiet "Saved" tell.
+
+**Player profile** reads `store.lessonsForPlayer(id)` (newest-first) for the session
+timeline, `store.drillLibrary()` / `store.getDrill(id)` to resolve drill names,
+and renders tool/percentile bars with `.pct-bar > span` colored by
+`charts.savantColor(pct)`; signed stat deltas use the `up`/`down`/`seam` tones.
 
 ## Conventions checklist for a new view
 - IIFE + `'use strict'`; grab `var CT = window.CT;`.

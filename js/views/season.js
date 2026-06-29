@@ -99,10 +99,23 @@
     });
   }
 
+  // Combine the design-system classes for a cell: `num` (right-align + tabular),
+  // plus the youth col-high (accent) / col-low (de-emphasis) signal.
+  function cellClasses(c) {
+    const parts = [];
+    if (c.num) parts.push('num');
+    if (c.signal === 'high') parts.push('col-high');
+    else if (c.signal === 'low') parts.push('col-low');
+    return parts;
+  }
+
   function thHtml(tbl, c, sort) {
     const active = sort.key === c.key;
-    const ind = active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
-    const cls = 'sortable' + (c.signal === 'high' ? ' col-high' : (c.signal === 'low' ? ' col-low' : ''));
+    // Lucide sort glyph (no emoji / unicode triangles) — router repaints icons.
+    const ind = active
+      ? '<i class="sort-ind" data-lucide="' + (sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') + '"></i>'
+      : '';
+    const cls = ['sortable'].concat(cellClasses(c)).join(' ');
     return '<th class="' + cls + '" data-tbl="' + tbl + '" data-key="' + esc(c.key) + '"' +
       (active ? ' aria-sort="' + (sort.dir === 'asc' ? 'ascending' : 'descending') + '"' : '') +
       '>' + esc(c.label) + ind + '</th>';
@@ -111,8 +124,9 @@
   function renderTable(tbl, columns, rows, sort) {
     const head = '<tr>' + columns.map(function (c) { return thHtml(tbl, c, sort); }).join('') + '</tr>';
     const body = sortRows(rows, columns, sort).map(function (r) {
-      return '<tr' + (r._below ? ' style="opacity:.45;"' : '') + '>' + columns.map(function (c) {
-        const cls = c.signal === 'high' ? ' class="col-high"' : (c.signal === 'low' ? ' class="col-low"' : '');
+      return '<tr' + (r._below ? ' class="below-q"' : '') + '>' + columns.map(function (c) {
+        const parts = cellClasses(c);
+        const cls = parts.length ? ' class="' + parts.join(' ') + '"' : '';
         return '<td' + cls + '>' + c.cell(r) + '</td>';
       }).join('') + '</tr>';
     }).join('');
@@ -122,7 +136,7 @@
   // ----- column definitions -----
   function nameCol() {
     return {
-      key: 'name', label: 'Player', signal: null,
+      key: 'name', label: 'Player', signal: null, num: false,
       sortVal: function (r) { return (r.player.name || '').toLowerCase(); },
       cell: function (r) {
         const j = r.player.jersey ? ' <span class="muted">#' + esc(r.player.jersey) + '</span>' : '';
@@ -131,13 +145,13 @@
     };
   }
   function rateCol(key, label, get, signal) {
-    return { key: key, label: label, signal: signal || null, sortVal: get, cell: function (r) { return S.fmtRate(get(r)); } };
+    return { key: key, label: label, signal: signal || null, num: true, sortVal: get, cell: function (r) { return S.fmtRate(get(r)); } };
   }
   function pctCol(key, label, get, signal) {
-    return { key: key, label: label, signal: signal || null, sortVal: get, cell: function (r) { return S.fmtPct(get(r), 1); } };
+    return { key: key, label: label, signal: signal || null, num: true, sortVal: get, cell: function (r) { return S.fmtPct(get(r), 1); } };
   }
   function numCol(key, label, get, fmt, signal) {
-    return { key: key, label: label, signal: signal || null, sortVal: get, cell: function (r) { const v = get(r); return v == null ? '—' : (fmt ? fmt(v) : v); } };
+    return { key: key, label: label, signal: signal || null, num: true, sortVal: get, cell: function (r) { const v = get(r); return v == null ? '—' : (fmt ? fmt(v) : v); } };
   }
 
   function battingColumns(youth) {
@@ -170,7 +184,7 @@
     const p = function (f) { return function (r) { return r.pit ? r.pit[f] : null; }; };
     return [
       nameCol(),
-      { key: 'ip', label: 'IP', signal: null, sortVal: function (r) { return r.pit ? r.pit.outs : null; }, cell: function (r) { return r.pit ? r.pit.ipDisplay : '—'; } },
+      { key: 'ip', label: 'IP', signal: null, num: true, sortVal: function (r) { return r.pit ? r.pit.outs : null; }, cell: function (r) { return r.pit ? r.pit.ipDisplay : '—'; } },
       numCol('era', 'ERA', p('era'), S.fmt2),
       numCol('whip', 'WHIP', p('whip'), S.fmt2),
       pctCol('strikePct', 'Strike%', p('strikePct'), 'high'),
@@ -239,7 +253,7 @@
     html += '</div>';
 
     if (!games.length) {
-      html += ui.emptyState('📊', 'No games in scope',
+      html += ui.emptyState('bar-chart-3', 'No games in scope',
         state.scope === 'season' ? 'No games logged for this season yet. Try Career, or log games in the Games view.' : 'No games logged yet. Add games to see team and season stats.');
       html += '</div>';
       root.innerHTML = html;
@@ -250,6 +264,8 @@
     // ---- team record + process rates ----
     const rec = teamRecord(games);
     const diff = rec.rf - rec.ra;
+    // Signed run differential with a real minus sign (U+2212), per design system.
+    const diffLabel = (diff > 0 ? '+' : (diff < 0 ? '−' : '')) + Math.abs(diff);
     const recLabel = rec.w + '-' + rec.l + (rec.t ? '-' + rec.t : '');
     const allBat = [];
     const allPit = [];
@@ -262,7 +278,7 @@
 
     html += '<div class="stats">' +
       ui.statTile(recLabel, 'Record (' + games.length + ' G)') +
-      ui.statTile((diff > 0 ? '+' : '') + diff, 'Run differential') +
+      ui.statTile(diffLabel, 'Run differential') +
       ui.statTile(rec.rf + '/' + rec.ra, 'Runs for / against') +
       ui.statTile(S.fmtRate(teamBat.obp), 'Team OBP') +
       ui.statTile(S.fmtPct(teamBat.bbPct, 0), 'Team BB%') +
@@ -274,7 +290,7 @@
 
     if (youth) {
       html += ui.card({ className: 'season-note', body:
-        '<p class="note" style="margin:0;"><strong style="color:var(--accent);">Youth development view.</strong> ' +
+        '<p class="note" style="margin:0;"><strong style="color:var(--accent-400);">Youth development view.</strong> ' +
         'On-base, walk, strikeout, quality-at-bat and strike rates (highlighted) are the high-signal process numbers — read them as trends, not pass/fail. ' +
         'AVG and RBI are noisy at this level and de-emphasized. These tables are private coaching tools, not public rankings.</p>' });
     }
@@ -380,7 +396,7 @@
     const players = store.getPlayers();
     if (!players.length) {
       root.innerHTML = ui.pageHead('Team & Season Stats', 'Derived team & season rate stats') +
-        ui.emptyState('📊', 'No players yet', 'Add players and log games to see team and season stats.');
+        ui.emptyState('bar-chart-3', 'No players yet', 'Add players and log games to see team and season stats.');
       return;
     }
     build(root);
