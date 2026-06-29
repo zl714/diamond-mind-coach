@@ -4,51 +4,67 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0d1b0e" />
-  <meta name="description" content="Coach Tracker — a baseball coaching client and progress tracker. Built by Zachary LeCroy to manage real coaching clients." />
-  <title>Coach Tracker — Baseball Coaching Client & Progress Tracker</title>
+  <meta name="description" content="Coach Tracker — baseball player-development platform: roster, assessments, games, season stats, Pitch Smart arm safety, and training programs. Built by Zachary LeCroy." />
+  <title>Coach Tracker — Player Development Platform</title>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" />
   <link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
   <nav class="topnav">
     <div class="topnav-inner">
-      <a class="brand" href="#/" aria-label="Coach Tracker home">
+      <a class="brand" href="#/roster" aria-label="Coach Tracker home">
         <span class="brand-mark" aria-hidden="true">&#9918;</span>
         <span class="brand-name">Coach Tracker</span>
         <span id="demo-badge" class="demo-badge" hidden>Demo data</span>
       </a>
-      <a class="portfolio-link" href="https://github.com/zacklecroy" target="_blank" rel="noopener noreferrer">Back to portfolio &rarr;</a>
+      <div class="toolbar">
+        <button id="btn-export" class="btn btn-sm btn-ghost" type="button" title="Export all data as JSON">Export</button>
+        <button id="btn-import" class="btn btn-sm btn-ghost" type="button" title="Import data from JSON">Import</button>
+        <button id="btn-reset" class="btn btn-sm btn-ghost" type="button" title="Reset to demo data">Reset demo</button>
+      </div>
     </div>
+    <!-- Tab bar: built dynamically by the router from registered views -->
+    <div class="tabs-wrap"><nav id="view-tabs" class="view-tabs" aria-label="Sections"></nav></div>
   </nav>
 
-  <main id="view" class="view" aria-live="polite">
-    <!-- Views are rendered here by js/app.js -->
+  <main id="view-root" class="view" aria-live="polite">
+    <!-- Active view is rendered here by the router -->
   </main>
 
-  <!-- Modal host -->
   <div id="modal-root"></div>
-
-  <!-- Toast host -->
   <div id="toast-root" class="toast-root" aria-live="assertive"></div>
 
   <footer class="site-footer">
-    <p>Coach Tracker &middot; built by Zachary LeCroy &middot; data stays in your browser (localStorage)</p>
+    <p>Coach Tracker &middot; built by Zachary LeCroy &middot; data stays in your browser (localStorage) &middot; youth-safety first (Pitch Smart)</p>
   </footer>
 
-  <!-- Chart.js from CDN (no build step) -->
+  <!-- Chart.js 4 from CDN (no build step) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
-  <!-- App scripts: small, feature-focused files -->
+  <!-- Foundation scripts (order matters) -->
   <script src="js/constants.js"></script>
+  <script src="js/model.js"></script>
+  <script src="js/benchmarks.js"></script>
+  <script src="js/programs-data.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/pitchsmart.js"></script>
   <script src="js/sample-data.js"></script>
-  <script src="js/storage.js"></script>
+  <script src="js/store.js"></script>
   <script src="js/io.js"></script>
   <script src="js/ui.js"></script>
-  <script src="js/players.js"></script>
-  <script src="js/sessions.js"></script>
   <script src="js/charts.js"></script>
-  <script src="js/dashboard.js"></script>
-  <script src="js/detail.js"></script>
   <script src="js/app.js"></script>
+
+  <!-- Feature views: each calls CT.registerView() on load. Pre-included for all
+       of phase 2; the router skips any that haven't registered and try/catches
+       each render so one broken view never blanks the app. -->
+  <script src="js/views/roster.js"></script>
+  <script src="js/views/dashboard.js"></script>
+  <script src="js/views/assessment.js"></script>
+  <script src="js/views/games.js"></script>
+  <script src="js/views/season.js"></script>
+  <script src="js/views/armsafety.js"></script>
+  <script src="js/views/programs.js"></script>
+  <script src="js/views/alerts.js"></script>
 </body>
 </html>
