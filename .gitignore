@@ -1,0 +1,16 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs / dependency dirs (this app has none, but keep it safe)
+node_modules/
+npm-debug.log*
+*.log
