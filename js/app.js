@@ -136,6 +136,12 @@
         'Replace ALL current data with the fictional demo dataset? This cannot be undone.',
         'Reset to demo', function () { CT.store.resetToSample(); CT.ui.toast('Demo data restored'); route(); });
     });
+    const cl = document.getElementById('btn-clear');
+    if (cl) cl.addEventListener('click', function () {
+      CT.ui.confirmDialog('Start fresh',
+        'Erase ALL demo players, sessions, games, drills, and programs so you can use this for your real clients? This cannot be undone — export a backup first if you want one. The app stays empty after reload.',
+        'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your real players in Roster'); route(); });
+    });
     // Mobile quick-log '+': jump to the session-logging view once it ships
     // (id 'lessons'), otherwise fall back to the roster.
     const ql = document.getElementById('quick-log');
