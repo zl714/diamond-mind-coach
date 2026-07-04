@@ -11,6 +11,7 @@
   // ---------------------------------------------------------------------------
   const AGE_BANDS = ['9-10U', '11-12U', '13-14U', '15-16U', '17-18U'];
   const LEVELS = ['youth', 'HS', 'college', 'pro'];
+  const LEVEL_LABELS = { youth: 'Youth', HS: 'High school', college: 'College', pro: 'Pro' };
 
   // Positions are a fixed enum (v3). Free text is normalized on save/migration.
   const POSITIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'OF', 'IF', 'UTIL'];
@@ -43,11 +44,16 @@
     }
     return null;
   }
+  // Multi-position free text ("pitcher / shortstop", "P, SS", "C & 1B") is
+  // split on common delimiters BEFORE normalizing, so migration never silently
+  // drops a position (losing 'P' would break Pitch Smart tracking).
   function normalizePositions(list) {
     const out = [];
     (Array.isArray(list) ? list : []).forEach(function (x) {
-      const p = normalizePosition(x);
-      if (p && out.indexOf(p) < 0) out.push(p);
+      String(x == null ? '' : x).split(/[\/,;+&|]|\band\b/i).forEach(function (part) {
+        const p = normalizePosition(part);
+        if (p && out.indexOf(p) < 0) out.push(p);
+      });
     });
     return out;
   }
@@ -575,11 +581,21 @@
     Hitting: 'hitting', Pitching: 'throwing', Fielding: 'fielding',
     Baserunning: 'speed', Strength: 'strength', Mobility: 'strength'
   };
+  // Case-insensitive lookup ('mobility' must land in strength, not fall
+  // through to the hitting default like the old exact-case map did).
+  const DRILL_CATEGORY_MAP_LC = {};
+  Object.keys(DRILL_CATEGORY_MAP).forEach(function (k) {
+    DRILL_CATEGORY_MAP_LC[k.toLowerCase()] = DRILL_CATEGORY_MAP[k];
+  });
+  function normalizeDrillCategory(raw) {
+    const t = String(raw || '').trim().toLowerCase();
+    if (DRILL_CATEGORIES.indexOf(t) >= 0) return t;
+    return DRILL_CATEGORY_MAP_LC[t] || 'hitting';
+  }
 
   function Drill(d) {
     d = d || {};
-    let cat = String(d.category || '');
-    if (DRILL_CATEGORIES.indexOf(cat) < 0) cat = DRILL_CATEGORY_MAP[cat] || 'hitting';
+    const cat = normalizeDrillCategory(d.category);
     return {
       id: str(d.id, id('drl')),
       name: str(d.name, 'New Drill'),
@@ -656,6 +672,7 @@
   window.CT.model = {
     AGE_BANDS: AGE_BANDS,
     LEVELS: LEVELS,
+    LEVEL_LABELS: LEVEL_LABELS,
     POSITIONS: POSITIONS,
     POSITION_LABELS: POSITION_LABELS,
     INNINGS_PER_GAME: INNINGS_PER_GAME,
@@ -668,6 +685,7 @@
     DRILL_CATEGORIES: DRILL_CATEGORIES,
     DRILL_CATEGORY_LABELS: DRILL_CATEGORY_LABELS,
     DRILL_CATEGORY_MAP: DRILL_CATEGORY_MAP,
+    normalizeDrillCategory: normalizeDrillCategory,
     PROGRAM_TYPES: PROGRAM_TYPES,
     PROGRAM_SOURCES: PROGRAM_SOURCES,
     DAY_INTENSITIES: DAY_INTENSITIES,

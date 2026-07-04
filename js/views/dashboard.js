@@ -44,11 +44,12 @@
   // ---------- roll-up: what needs attention ----------
   function rollup(players) {
     const pitchers = players.filter(isPitcher);
-    let cleared = 0, resting = 0;
+    let cleared = 0, resting = 0, caution = 0;
     const attention = {};   // playerId -> true (distinct affected players)
     pitchers.forEach(function (p) {
       const v = ps.evaluate(p, store.byPlayer('workloadLogs', p.id));
       if (v.status === 'green') cleared++;
+      if (v.status === 'yellow') caution++;
       if (v.status === 'red') { resting++; attention[p.id] = true; }
     });
     let pain = 0, overdue = 0;
@@ -60,7 +61,7 @@
       if (!last || days > ASSESS_STALE_DAYS) { overdue++; attention[p.id] = true; }
     });
     return {
-      pitchers: pitchers.length, cleared: cleared, resting: resting,
+      pitchers: pitchers.length, cleared: cleared, resting: resting, caution: caution,
       pain: pain, overdue: overdue,
       attentionCount: Object.keys(attention).length
     };
@@ -116,9 +117,15 @@
     const alertTone = red > 0 ? 'var(--seam)' : (alerts.length ? 'var(--warn)' : 'var(--text-hi)');
     const armTone = r.resting > 0 ? 'var(--seam)' : 'var(--text-hi)';
     const overdueTone = r.overdue > 0 ? 'var(--warn)' : 'var(--text-hi)';
+    // Arms-cleared sublabel accounts for EVERY uncleared arm (resting = red,
+    // caution = yellow) — "all healthy" only when everything is green.
+    const armParts = [];
+    if (r.resting) armParts.push(r.resting + ' resting');
+    if (r.caution) armParts.push(r.caution + ' caution');
+    const armSub = armParts.length ? armParts.join(' · ') : 'all healthy';
     return '<div class="dash-tiles">' +
       tile('Players', String(players.length), r.pitchers + ' pitcher' + (r.pitchers === 1 ? '' : 's'), null) +
-      tile('Arms cleared', r.cleared + '/' + r.pitchers, r.resting ? (r.resting + ' resting') : 'all healthy', armTone) +
+      tile('Arms cleared', r.cleared + '/' + r.pitchers, armSub, armTone) +
       tile('Active alerts', String(alerts.length), red + ' critical', alertTone) +
       tile('Assessments due', String(r.overdue), r.overdue ? 'over ' + ASSESS_STALE_DAYS + ' days' : 'all current', overdueTone) +
     '</div>';
@@ -137,6 +144,7 @@
       if (!prog || !player) return;
       if ((prog.daysPerWeek || 0) === 0) return;                    // overlay — nothing to log
       if (a.startDate && a.startDate > todayStr) return;            // hasn't started
+      if (CT.programs.isEnded(prog, a, todayStr)) return;           // block is over — nothing due
       if (a.daysOfWeek && a.daysOfWeek.length && a.daysOfWeek.indexOf(todayDow) < 0) return;
       const logged = store.where('sessionLogs', 'assignmentId', a.id)
         .some(function (l) { return l.date === todayStr; });

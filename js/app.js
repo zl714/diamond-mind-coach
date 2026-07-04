@@ -271,6 +271,18 @@
           '<i data-lucide="clipboard-check"></i>' +
           '<span class="qa-txt"><span class="qa-name">Log program session</span>' +
           '<span class="qa-sub">Check off an assigned program day</span></span></a>' +
+      '</div>' +
+      // Mobile-only data tools (the sidebar tools are hidden < 768px — this is
+      // the phone's backup path for localStorage-only data).
+      '<div class="al-panel-list qa-mobile-tools">' +
+        '<button class="qa-item" type="button" data-qa="export">' +
+          '<i data-lucide="download"></i>' +
+          '<span class="qa-txt"><span class="qa-name">Export data</span>' +
+          '<span class="qa-sub">Download everything as JSON (backup)</span></span></button>' +
+        '<button class="qa-item" type="button" data-qa="import">' +
+          '<i data-lucide="upload"></i>' +
+          '<span class="qa-txt"><span class="qa-name">Import data</span>' +
+          '<span class="qa-sub">Restore from a JSON backup</span></span></button>' +
       '</div>';
     paintIcons();
   }
@@ -304,6 +316,8 @@
         if (CT.sessionLog) CT.sessionLog.open({}); // player picker inside
         return;
       }
+      if (e.target.closest('[data-qa="export"]')) { closeQuickAdd(); CT.io.exportJSON(); return; }
+      if (e.target.closest('[data-qa="import"]')) { closeQuickAdd(); CT.io.importJSON(function () { route(); }); return; }
       if (e.target.closest('a')) closeQuickAdd();
     });
     document.addEventListener('click', function (e) {
@@ -311,6 +325,21 @@
       if (!panel.contains(e.target) && !btn.contains(e.target)) closeQuickAdd();
     });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeQuickAdd(); });
+  }
+
+  // Assignments never outlive their program block: anything past
+  // startDate + weeks is auto-completed at boot, so migrated/old assignments
+  // can't leave a permanent "due today" nag or a false adherence alert.
+  function autoCompleteEndedAssignments() {
+    try {
+      CT.store.all('programAssignments').forEach(function (a) {
+        if (a.status === 'completed') return;
+        const prog = CT.store.getById('programs', a.programId);
+        if (prog && CT.programs.isEnded(prog, a)) {
+          CT.store.update('programAssignments', a.id, { status: 'completed' });
+        }
+      });
+    } catch (e) { console.warn('Assignment auto-complete sweep failed:', e); }
   }
 
   // Toolbar actions (export / import / start fresh) wired once at boot.
@@ -338,6 +367,7 @@
     // Seed the canonical drill library (insert-if-missing; coach edits and
     // deletions are respected — see drills-seed.js).
     try { if (CT.seeds) CT.seeds.ensure(); } catch (e) { console.warn('Drill seeding failed:', e); }
+    autoCompleteEndedAssignments();
     wireToolbar();
     wireAlertsBell();
     wireQuickAdd();

@@ -24,7 +24,7 @@
   const CAT_LABEL = {
     pain: 'Pain',
     pitchsmart: 'Pitch Smart',
-    acwr: 'ACWR',
+    acwr: 'Workload',
     adherence: 'Adherence'
   };
 
@@ -148,20 +148,24 @@
         }));
       }
 
-      // ACWR workload spike.
+      // Workload spike (ACWR). Plain language for coaches, and the SAME
+      // severity as the roster's clearance pill (yellow — pitchsmart.evaluate
+      // treats an ACWR spike as caution, not a hard block). ACWR needs ~3
+      // weeks of history before it means anything (zone 'building' → ratio
+      // null → no alert here).
       if (v.acwr && v.acwr.ratio != null) {
         if (v.acwr.zone === 'danger') {
           out.push(makeAlert({
-            category: 'acwr', severity: 'red', playerId: p.id, playerName: p.name, date: today,
-            title: 'ACWR spike (danger)',
-            detail: 'Acute:chronic workload ratio ' + v.acwr.ratio.toFixed(2) +
-              ' is in the danger zone (>1.5) — a rapid workload jump that raises injury risk.'
+            category: 'acwr', severity: 'yellow', playerId: p.id, playerName: p.name, date: today,
+            title: 'Workload jumped too fast',
+            detail: 'This week\'s throwing is ' + v.acwr.ratio.toFixed(1) + '× the recent 4-week average — a rapid ' +
+              'jump that raises injury risk. Ease the build before loading up again.'
           }));
         } else if (v.acwr.zone === 'caution') {
           out.push(makeAlert({
             category: 'acwr', severity: 'yellow', playerId: p.id, playerName: p.name, date: today,
-            title: 'ACWR elevated (caution)',
-            detail: 'Acute:chronic workload ratio ' + v.acwr.ratio.toFixed(2) + ' (1.3–1.5) — ramping a touch fast. Ease the build.'
+            title: 'Workload climbing quickly',
+            detail: 'This week\'s throwing is ' + v.acwr.ratio.toFixed(1) + '× the recent 4-week average — ramping a touch fast. Ease the build.'
           }));
         }
       }
@@ -179,6 +183,8 @@
       if (a.status === 'paused' || a.status === 'completed') return;
       const prog = store.getById('programs', a.programId);
       if (!prog) return;
+      // A finished block can't accrue new misses — no permanent post-program flag.
+      if (CT.programs.isEnded(prog, a, todayStr)) return;
       const logs = store.where('sessionLogs', 'assignmentId', a.id);
       const adh = CT.programs.adherenceFor(prog, a, logs, todayStr);
       if (adh.due < ADHERENCE_MIN_SESSIONS) return;
@@ -256,7 +262,7 @@
       sub = CT.plural(yellow, 'caution flag') + ' — watch before loading up.';
     } else {
       tone = 'accent'; icon = 'shield-check'; status = 'All clear';
-      sub = 'No active pain, Pitch Smart, ACWR, or adherence flags.';
+      sub = 'No active pain, Pitch Smart, workload, or adherence flags.';
     }
     return '<div class="alerts-hero" style="' + ui.toneStyle(tone) + '">' +
       '<span class="alerts-hero-icon"><i data-lucide="' + icon + '"></i></span>' +
@@ -289,7 +295,7 @@
 
     if (!alerts.length) {
       html += ui.emptyState('shield-check', 'All clear',
-        'No pain flags, Pitch Smart violations, ACWR spikes, or program-adherence issues right now. Keep logging check-ins and workload to keep this feed honest.');
+        'No pain flags, Pitch Smart violations, workload spikes, or program-adherence issues right now. Keep logging check-ins and workload to keep this feed honest.');
       root.innerHTML = html;
       return;
     }

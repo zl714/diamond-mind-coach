@@ -221,13 +221,16 @@
           '<div class="qn-body" id="sl-qn">' + quickNumbersHtml(focus, player) + '</div></details>'
         : '') +
       '<div class="field-row">' +
+        // The live Pitch Smart readout sits INSIDE the throws slot, directly
+        // under the input, so a red status is visible while typing — never
+        // below the fold with only the save-time toast as a backstop.
         '<div id="sl-throws-slot"' + (showThrows ? '' : ' hidden') + '>' +
           ui.formField({ type: 'number', name: 'throws', label: 'Throws (count)', min: 0, max: 200, step: 1, placeholder: '0' }) +
+          '<div id="sl-ps-note" class="sl-ps-note" aria-live="polite"' + (showThrows ? '' : ' hidden') + '></div>' +
         '</div>' +
-        ui.formField({ type: 'number', name: 'rpe', label: 'RPE (1–10)', min: 1, max: 10, step: 1 }) +
-        ui.formField({ type: 'number', name: 'ratingDelta', label: 'Rating Δ (−2…+2)', min: -2, max: 2, step: 0.1, help: 'Coach grade change.' }) +
+        ui.formField({ type: 'number', name: 'rpe', label: 'Effort (RPE 1–10)', min: 1, max: 10, step: 1 }) +
+        ui.formField({ type: 'number', name: 'ratingDelta', label: 'Coach rating change', min: -2, max: 2, step: 0.1, help: 'Optional: −2 to +2 vs the last session.' }) +
       '</div>' +
-      '<div id="sl-ps-note" class="sl-ps-note" aria-live="polite"' + (showThrows ? '' : ' hidden') + '></div>' +
       ui.formField({ type: 'textarea', name: 'notes', label: 'Notes', placeholder: 'What you worked on, cues, what to repeat next time…' }) +
       '<div class="modal-actions">' +
         '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +

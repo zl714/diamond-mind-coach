@@ -56,6 +56,22 @@
   function gd() { return CT.generatorData; }
   function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 
+  // 1 -> "1st", 2 -> "2nd", 81 -> "81st", 12 -> "12th".
+  function ord(n) {
+    const v = Math.abs(Math.round(Number(n))) % 100;
+    const suffix = (v >= 11 && v <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[v % 10] || 'th');
+    return n + suffix;
+  }
+
+  // Disclose reading age when a cited number is stale (the why-line must never
+  // present a years-old reading as current).
+  const STALE_READING_DAYS = 90;
+  function measuredNote(snap) {
+    if (!snap || !snap.date) return '';
+    const n = CT.daysAgo(snap.date);
+    return (n != null && n > STALE_READING_DAYS) ? ', measured ' + CT.formatDate(snap.date) : '';
+  }
+
   function addDaysISO(iso, days) {
     const p = String(iso).split('-');
     const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
@@ -175,12 +191,16 @@
       return { status: 'locked', reason: 'No age-appropriate variant for age ' + age + '.', substituteGoalId: null };
     }
 
-    // Off-season-only work (weighted balls, OU bats) is hidden in-season.
+    // Off-season-only work (pull-downs, weighted balls, OU bats) is hidden
+    // in-season — the substitute is always a maintenance-safe goal.
     if (opts.inSeason && variant.offSeasonOnly) {
       return {
         status: 'locked',
-        reason: 'Off-season only — no ' + (goal.domain === 'hitting' ? 'overload/underload bats' : 'max-intent weighted-ball work') + ' in-season.',
-        substituteGoalId: goal.domain === 'hitting' ? 'hit-contact' : 'thr-base',
+        reason: 'Off-season only — no ' + (goal.domain === 'hitting'
+          ? 'overload/underload bats'
+          : 'max-intent throwing (pull-downs or weighted balls)') + ' in-season.',
+        substituteGoalId: goal.domain === 'hitting' ? 'hit-contact' : 'thr-armcare',
+        substituteLabel: goal.domain === 'hitting' ? 'Contact & barrel control' : 'Arm care & durability',
         variant: variant
       };
     }
@@ -212,14 +232,14 @@
     const ouEligible = age >= 15 || (age >= 13 && ready.minus3Bat);
     if (p.exitVeloMax.pct != null && p.exitVeloMax.pct < 40) {
       out.hitting = 'hit-power';
-      out.reasons.hitting = 'Max exit velo is at the ' + p.exitVeloMax.pct + 'th percentile for ' + band + ' — power is the gap.';
+      out.reasons.hitting = 'Max exit velo is at the ' + ord(p.exitVeloMax.pct) + ' percentile for ' + band + ' — power is the gap.';
     } else if (p.exitVeloMax.pct != null && p.batSpeed.pct != null &&
                p.batSpeed.pct <= p.exitVeloMax.pct - 20 && ouEligible) {
       out.hitting = 'hit-batspeed';
-      out.reasons.hitting = 'Bat speed (' + p.batSpeed.pct + 'th) lags exit velo (' + p.exitVeloMax.pct + 'th) by 20+ points — bat speed is the limiter.';
+      out.reasons.hitting = 'Bat speed (' + ord(p.batSpeed.pct) + ') lags exit velo (' + ord(p.exitVeloMax.pct) + ') by 20+ points — bat speed is the limiter.';
     } else {
       out.reasons.hitting = p.exitVeloMax.pct != null
-        ? 'Exit velo at the ' + p.exitVeloMax.pct + 'th percentile — sharpen contact and approach.'
+        ? 'Exit velo at the ' + ord(p.exitVeloMax.pct) + ' percentile — sharpen contact and approach.'
         : 'No hitting numbers yet — start with contact and barrel control.';
     }
 
@@ -236,7 +256,7 @@
         : 'Long toss at ' + p.maxThrowDist.value + ' ft is under 60% of the ' + cap + ' ft age cap — base first.';
     } else if (p.fastballVelo.pct != null && p.fastballVelo.pct < 40 && age >= 13) {
       out.throwing = 'thr-velo';
-      out.reasons.throwing = 'Throwing velo at the ' + p.fastballVelo.pct + 'th percentile with a solid long-toss base — age-gated velocity work applies.';
+      out.reasons.throwing = 'Throwing velo at the ' + ord(p.fastballVelo.pct) + ' percentile with a solid long-toss base — age-gated velocity work applies.';
     } else {
       out.throwing = 'thr-armcare';
       out.reasons.throwing = 'Numbers look healthy — hold the arm-care base.';
@@ -392,10 +412,14 @@
     const warnings = (elig.warnings || []).slice();
     const confirmations = opts.confirmations || {};
 
-    // Required confirmations must all be affirmed (stored readiness counts).
-    const missing = (elig.confirms || []).filter(function (c) {
-      return !(confirmations[c.key] || c.preChecked);
-    });
+    // Required confirmations must all be affirmed. A stored ("On file")
+    // readiness flag counts — but an EXPLICIT uncheck retracts it and blocks,
+    // so a mistaken or outdated attestation can always be withdrawn.
+    function confirmed(c) {
+      if (c.key in confirmations) return !!confirmations[c.key];
+      return !!c.preChecked;
+    }
+    const missing = (elig.confirms || []).filter(function (c) { return !confirmed(c); });
     if (missing.length) {
       return {
         ok: false, blocked: true,
@@ -409,14 +433,18 @@
     const dpw = Math.min(variant.dpw.max, Math.max(variant.dpw.min, num(opts.daysPerWeek) || variant.dpw.def));
     const pattern = (variant.pattern || gd().PATTERNS[dpw] || [1, 3, 5]).slice(0, dpw);
 
-    // Pitch Smart preflight: a red arm blocks throwing-goal start dates until
-    // the rest requirement clears (the daily throws gate still applies at log
-    // time — this just stops the coach scheduling an ineligible start).
+    // Pitch Smart preflight: any unexpired rest requirement blocks throwing-
+    // goal start dates until it clears. Uses restEligibleInDays (NOT
+    // daysUntilEligible) so an outing logged TODAY — the most common case:
+    // coach logs the game, then immediately builds the recovery program —
+    // pushes the start date past the mandatory rest window too. The daily
+    // throws gate still applies at log time.
     let startDate = opts.startDate || CT.todayISO();
     if (goal.type === 'throwing' && CT.model.isPitcher(player)) {
       const verdict = CT.pitchsmart.evaluate(player, CT.store.byPlayer('workloadLogs', player.id));
-      if (verdict.status === 'red' && verdict.daysUntilEligible > 0) {
-        const minStart = addDaysISO(CT.todayISO(), verdict.daysUntilEligible);
+      const restDays = verdict.restEligibleInDays || 0;
+      if (restDays > 0) {
+        const minStart = addDaysISO(CT.todayISO(), restDays);
         if (startDate < minStart) {
           startDate = minStart;
           warnings.push('Pitch Smart: not cleared to throw until ' + CT.formatDate(minStart) +
@@ -476,7 +504,7 @@
         if (n) {
           const label = weakKey === 'ev' ? 'exit velo' : 'bat speed';
           const pct = weakKey === 'ev' ? ev : bs;
-          whyBits.push(label + ' at the ' + pct + 'th percentile is the weaker tool → +1 round of ' +
+          whyBits.push(label + ' at the ' + ord(pct) + ' percentile is the weaker tool → +1 round of ' +
             (seed ? seed.name : slug) + ' on hitting days');
         }
       }
@@ -485,17 +513,25 @@
     // "Why this program" — the audit-friendly one-liner the wizard + builder show.
     // Cite the assessed number that motivates the goal (age band + weak metric).
     if (goalId === 'thr-velo' && pcts.fastballVelo.pct != null) {
-      whyBits.push('throwing velo ' + pcts.fastballVelo.value + ' mph (' + pcts.fastballVelo.pct + 'th %ile for ' + band + ') is the target tool');
+      whyBits.push('throwing velo ' + pcts.fastballVelo.value + ' mph (' + ord(pcts.fastballVelo.pct) + ' %ile for ' + band + ')' + measuredNote(pcts.fastballVelo) + ' is the target tool');
     }
     if (goalId === 'hit-power' && pcts.exitVeloMax.pct != null) {
-      whyBits.push('max exit velo ' + pcts.exitVeloMax.value + ' mph (' + pcts.exitVeloMax.pct + 'th %ile for ' + band + ') is the gap');
+      whyBits.push('max exit velo ' + pcts.exitVeloMax.value + ' mph (' + ord(pcts.exitVeloMax.pct) + ' %ile for ' + band + ')' + measuredNote(pcts.exitVeloMax) + ' is the gap');
     }
     if (goalId === 'thr-base' && pcts.maxThrowDist.value != null) {
-      whyBits.push('long toss ' + pcts.maxThrowDist.value + ' ft vs the ' + cap + ' ft ' + band + ' cap');
+      whyBits.push('long toss ' + pcts.maxThrowDist.value + ' ft' + measuredNote(pcts.maxThrowDist) +
+        ' vs the ' + cap + ' ft ' + band + ' cap');
     }
     const goalLabel = goal.label;
     whyBits.unshift('age ' + age + ' (' + band + ') → ' + variant.name);
-    if (opts.inSeason) whyBits.push('in-season → maintenance dosing, one full rest day guaranteed');
+    // Honest in-season line: "maintenance dosing" is claimed ONLY when a real
+    // season:'in' variant was selected — other in-season-safe goals just note
+    // that max-intent work stays locked.
+    if (opts.inSeason && variant.season === 'in') {
+      whyBits.push('in-season → maintenance dosing, one full rest day guaranteed');
+    } else if (opts.inSeason) {
+      whyBits.push('in-season → max-intent throwing, weighted balls, and overload bats stay locked');
+    }
     if (deloadWeeks.length) whyBits.push('deload every ' + variant.deloadEvery + 'th week (wk ' + deloadWeeks.join(', ') + ')');
     const why = 'Why this program: ' + goalLabel + ' — ' + whyBits.join('; ') + '.';
 
@@ -575,7 +611,7 @@
       slugs: slugs, warnings: warnings, why: why,
       lockSchedule: !!variant.lockSchedule,
       confirmsToStore: (elig.confirms || []).filter(function (c) {
-        return c.store && (confirmations[c.key] || c.preChecked);
+        return c.store && confirmed(c);
       }).map(function (c) { return c.key; })
     };
 

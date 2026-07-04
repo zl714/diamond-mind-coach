@@ -108,7 +108,9 @@
 
   function migrateDrill(d) {
     const out = Object.assign({}, d);
-    out.category = CT.model.DRILL_CATEGORY_MAP[d.category] || d.category || 'hitting';
+    // Case-insensitive: a lowercase v2 'mobility' lands in strength, never
+    // silently misfiled into the hitting default.
+    out.category = CT.model.normalizeDrillCategory(d.category);
     out.description = d.defaultNotes || d.description || '';
     delete out.defaultNotes;
     return out;
@@ -234,7 +236,9 @@
 
     return {
       schemaVersion: 3,
-      settings: {},
+      // Carry legacy settings (orgName / coachName / preferences) through —
+      // the store's settings factory normalizes unknown keys away.
+      settings: (data.settings && typeof data.settings === 'object') ? Object.assign({}, data.settings) : {},
       teams: arr(data.teams),
       seasons: arr(data.seasons),
       players: arr(data.players).map(migratePlayer),

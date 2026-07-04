@@ -111,10 +111,14 @@
   function minStartDate(player, goal) {
     if (!goal || goal.type !== 'throwing' || !model.isPitcher(player)) return null;
     const verdict = CT.pitchsmart.evaluate(player, store.byPlayer('workloadLogs', player.id));
-    if (verdict.status === 'red' && verdict.daysUntilEligible > 0) {
+    // restEligibleInDays counts a SAME-DAY outing's rest requirement too
+    // (daysUntilEligible starts the day after the outing), so a coach who logs
+    // the game and immediately builds the program still gets the preflight.
+    const restDays = verdict.restEligibleInDays || 0;
+    if (restDays > 0) {
       const p = CT.todayISO().split('-');
       const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
-      d.setDate(d.getDate() + verdict.daysUntilEligible);
+      d.setDate(d.getDate() + restDays);
       const tz = d.getTimezoneOffset() * 60000;
       return { date: new Date(d - tz).toISOString().slice(0, 10), verdict: verdict };
     }
@@ -154,9 +158,14 @@
     const weeksLocked = variant.weeks.min === variant.weeks.max || !!variant.rfs;
     const dpwLocked = variant.dpw.min === variant.dpw.max || !!variant.lockSchedule;
 
+    // Honest toggle copy: hitting/strength goals have real maintenance
+    // variants; throwing goals don't — in-season simply locks max-intent work.
+    const inSeasonHint = goal && goal.domain === 'throwing'
+      ? ' — max-intent throwing (pull-downs, weighted balls) locks; arm care and return-to-throw stay available.'
+      : ' — uses the in-season maintenance dosing where one exists; overload bats and weighted balls stay locked.';
     let togglesHtml =
       '<label class="field-check gen-toggle"><input type="checkbox" id="gen-inseason"' + (state.inSeason ? ' checked' : '') + ' /> ' +
-        '<span><strong>In-season right now</strong><span class="muted"> — switches to the maintenance variant; overload bats and weighted balls stay locked.</span></span></label>';
+        '<span><strong>In-season right now</strong><span class="muted">' + esc(inSeasonHint) + '</span></span></label>';
     if (state.goalId === 'thr-rfs') {
       togglesHtml +=
         '<label class="field-check gen-toggle"><input type="checkbox" id="gen-layoff"' + (state.longLayoff ? ' checked' : '') + ' /> ' +
@@ -181,11 +190,24 @@
     const warningsHtml = (elig.warnings || []).map(function (w) {
       return '<div class="pgm-referral"><i data-lucide="alert-triangle"></i><span>' + esc(w) + '</span></div>';
     }).join('') + (ms
-      ? '<div class="pgm-referral"><i data-lucide="shield-alert"></i><span>Pitch Smart: ' +
-        esc(ms.verdict.reasons[0] || 'resting') + ' Start dates before ' + esc(CT.formatDate(ms.date)) + ' are blocked.</span></div>'
+      ? (function () {
+          // Spell out the rest requirement explicitly — the verdict's first
+          // reason doesn't cover a same-day outing (rest starts tomorrow).
+          const lo = ms.verdict.lastOuting;
+          const why = lo
+            ? 'Threw ' + lo.pitches + ' pitches ' + (lo.daysSince === 0 ? 'today' : 'on ' + CT.formatDate(lo.date)) +
+              ' — requires ' + CT.plural(lo.restNeeded, 'rest day') + '.'
+            : String(ms.verdict.reasons[0] || 'Resting.');
+          return '<div class="pgm-referral"><i data-lucide="shield-alert"></i><span>Pitch Smart: ' + esc(why) +
+            ' Start dates before ' + esc(CT.formatDate(ms.date)) + ' are blocked.</span></div>';
+        })()
       : '');
 
-    const allConfirmed = confirms.every(function (c) { return state.confirms[c.key] || c.preChecked; });
+    // Explicitly unchecking an "On file" flag retracts it — the wizard (and
+    // generate()) treat that as missing, so outdated attestations can be withdrawn.
+    const allConfirmed = confirms.every(function (c) {
+      return (c.key in state.confirms) ? state.confirms[c.key] : c.preChecked;
+    });
 
     return ui.card({
       title: 'Schedule — ' + variant.name,
@@ -193,8 +215,12 @@
       body:
         warningsHtml +
         '<div class="field-row">' +
-          ui.formField({ type: 'number', name: 'gen-weeks', label: 'Weeks (' + variant.weeks.min + '–' + variant.weeks.max + ')', value: state.weeks, min: variant.weeks.min, max: variant.weeks.max, step: 1 }) +
-          ui.formField({ type: 'number', name: 'gen-dpw', label: 'Days / week (' + variant.dpw.min + '–' + variant.dpw.max + ')', value: state.dpw, min: variant.dpw.min, max: variant.dpw.max, step: 1 }) +
+          ui.formField({ type: 'number', name: 'gen-weeks',
+            label: weeksLocked ? 'Weeks (fixed at ' + variant.weeks.def + ')' : 'Weeks (' + variant.weeks.min + ' to ' + variant.weeks.max + ')',
+            value: state.weeks, min: variant.weeks.min, max: variant.weeks.max, step: 1 }) +
+          ui.formField({ type: 'number', name: 'gen-dpw',
+            label: dpwLocked ? 'Days / week (fixed at ' + variant.dpw.def + ')' : 'Days / week (' + variant.dpw.min + ' to ' + variant.dpw.max + ')',
+            value: state.dpw, min: variant.dpw.min, max: variant.dpw.max, step: 1 }) +
           ui.formField({ type: 'date', name: 'gen-start', label: 'Start date', value: state.startDate }) +
         '</div>' +
         '<div class="help" style="margin:calc(-1 * var(--sp-2)) 0 var(--sp-3);">Training days: ' +
@@ -285,7 +311,7 @@
       rawTitle: true,
       title: esc(prog.name) + ' <span class="pill" style="' + ui.toneStyle('accent') + '">Generated</span>',
       subtitle: prog.weeks + ' weeks × ' + prog.daysPerWeek + ' days/week · starts ' + CT.formatDate(plan.assignment.startDate) +
-        (prog.ageGateMin != null ? ' · hard age gate ' + prog.ageGateMin + '+' : ''),
+        (prog.ageGateMin != null ? ' · ages ' + prog.ageGateMin + '+ only' : ''),
       body:
         '<div class="gen-why"><i data-lucide="sparkles"></i><span>' + esc(plan.why) + '</span></div>' +
         plan.warnings.map(function (wn) {
@@ -334,7 +360,7 @@
       '<a class="back-link" href="#/player/' + esc(player.id) + '"><i data-lucide="chevron-left"></i>' + esc(player.name) + '</a>' +
       ui.pageHead('Build a program',
         player.name + (age != null ? ' · ' + age + ' yrs (' + (band || '—') + ')' : '') +
-        ' — deterministic, research-backed, every hard gate enforced') +
+        ' — age-safe by design: anything unsafe for this player stays locked') +
       dots() +
       '<div class="' + (state.step === 3 ? '' : 'wiz-wrap') + '">' + stepHtml + '</div>';
 

@@ -88,25 +88,70 @@
   function render(root, ctx) {
     const all = store.drillLibrary();
 
+    // Search + category jump: 59 seeded drills are unusable as one long
+    // scroll — filter by name/description live, or hop straight to a category.
+    const toolbarHtml =
+      '<div class="lib-toolbar">' +
+        '<div class="lib-search"><i data-lucide="search"></i>' +
+          '<input type="search" id="drill-search" placeholder="Search drills…" aria-label="Search drills" /></div>' +
+        '<div class="lib-jump">' +
+          model.DRILL_CATEGORIES.map(function (cat) {
+            const n = all.filter(function (d) { return d.category === cat; }).length;
+            if (!n) return '';
+            return '<button type="button" class="dow-chip" data-jump="' + esc(cat) + '">' +
+              esc(model.DRILL_CATEGORY_LABELS[cat] || cat) + ' <span class="num">' + n + '</span></button>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+
     let html = ui.card({
       title: 'Drill library',
-      subtitle: all.length + ' drill' + (all.length === 1 ? '' : 's') + ' · the building blocks programs and sessions are made of',
+      subtitle: all.length + ' drill' + (all.length === 1 ? '' : 's') + ' · the building blocks for programs and sessions',
       actions: '<button class="btn btn-primary btn-sm" id="add-drill"><i data-lucide="plus"></i>New drill</button>',
       body: all.length
-        ? model.DRILL_CATEGORIES.map(function (cat) {
+        ? toolbarHtml + model.DRILL_CATEGORIES.map(function (cat) {
             const rows = all.filter(function (d) { return d.category === cat; });
             if (!rows.length) return '';
-            return '<div class="lib-group">' +
+            return '<div class="lib-group" data-cat="' + esc(cat) + '">' +
               '<div class="lib-cat">' + esc(model.DRILL_CATEGORY_LABELS[cat] || cat) + ' <span class="num">' + rows.length + '</span></div>' +
               '<div class="drill-lib-list" role="list">' + rows.map(drillRow).join('') + '</div>' +
             '</div>';
-          }).join('')
+          }).join('') +
+          '<p class="muted lib-no-match" hidden style="margin:var(--sp-3) 0 0;">No drills match that search.</p>'
         : ui.emptyState('dumbbell', 'No drills yet',
             'Add your go-to drills once — then drag them into programs and check them off in sessions.',
             '<button class="btn btn-primary" id="add-drill-empty"><i data-lucide="plus"></i>Add your first drill</button>')
     });
 
     root.innerHTML = html;
+
+    // Live search: hide non-matching rows, collapse emptied groups.
+    const search = root.querySelector('#drill-search');
+    if (search) {
+      const byId = {};
+      all.forEach(function (d) { byId[d.id] = (d.name + ' ' + (d.description || '')).toLowerCase(); });
+      search.addEventListener('input', function () {
+        const q = search.value.trim().toLowerCase();
+        root.querySelectorAll('.drill-row').forEach(function (row) {
+          const hay = byId[row.getAttribute('data-id')] || '';
+          row.hidden = !!q && hay.indexOf(q) < 0;
+        });
+        let anyVisible = false;
+        root.querySelectorAll('.lib-group').forEach(function (group) {
+          const vis = Array.prototype.some.call(group.querySelectorAll('.drill-row'), function (r) { return !r.hidden; });
+          group.hidden = !vis;
+          if (vis) anyVisible = true;
+        });
+        const noMatch = root.querySelector('.lib-no-match');
+        if (noMatch) noMatch.hidden = anyVisible;
+      });
+    }
+    root.querySelectorAll('[data-jump]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const group = root.querySelector('.lib-group[data-cat="' + b.getAttribute('data-jump') + '"]');
+        if (group) group.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
 
     ['#add-drill', '#add-drill-empty'].forEach(function (sel) {
       const b = root.querySelector(sel);

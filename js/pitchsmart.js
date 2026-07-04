@@ -76,10 +76,27 @@
 
   // Acute:Chronic Workload Ratio. Acute = last 7d pitch load; chronic = avg weekly
   // load over the last 28d. Sweet spot ~0.8–1.3; > 1.5 is a spike risk.
+  // ACWR is statistically meaningless without a real chronic baseline: with a
+  // single (or first-week) log, acute == chronic sample and the ratio is a
+  // pure artifact (e.g. 4.00 after one 40-throw session). We therefore return
+  // zone 'building' (ratio null) until the player has MIN_CHRONIC_DAYS of
+  // logged history behind the evaluation date.
+  const MIN_CHRONIC_DAYS = 21;
+
   function computeACWR(byDay, asOf) {
+    const ref = asOf || todayISO();
     const acute = pitchesInWindow(byDay, 7, asOf);
     const chronic28 = pitchesInWindow(byDay, 28, asOf);
     const chronicWeekly = chronic28 / 4;
+    // History span: days between the oldest pitching log and the eval date.
+    let span = 0;
+    Object.keys(byDay).forEach(function (date) {
+      const d = dayDiff(ref, date);
+      if (d > span) span = d;
+    });
+    if (span < MIN_CHRONIC_DAYS) {
+      return { acute: acute, chronicWeekly: chronicWeekly, ratio: null, zone: 'building' };
+    }
     const ratio = chronicWeekly ? acute / chronicWeekly : null;
     let zone = 'unknown';
     if (ratio != null) {
@@ -152,6 +169,15 @@
         lastPitches + ' pitches on ' + CT.formatDate(lastDate) + '.');
     }
 
+    // Forward-looking rest window: days from `asOf` until the rest requirement
+    // fully clears. UNLIKE daysUntilEligible this COUNTS a same-day outing
+    // (daysSinceLast === 0), so schedule preflights (program generator, wizard
+    // start-date min) can never place a throwing day inside required rest —
+    // even when the outing was logged TODAY. Same-day throwing itself stays
+    // governed by remainingToday only.
+    const restEligibleInDays = (lastDate && daysSinceLast >= 0 && daysSinceLast < restNeeded)
+      ? restNeeded - daysSinceLast : 0;
+
     // Today's remaining allowance.
     const thrownToday = byDay[asOf] || 0;
     const remainingToday = daysUntilEligible > 0 ? 0 : Math.max(0, max - thrownToday);
@@ -186,6 +212,7 @@
       cleared: status !== 'red',
       status: status,
       daysUntilEligible: daysUntilEligible,
+      restEligibleInDays: restEligibleInDays,
       remainingToday: remainingToday,
       thrownToday: thrownToday,
       lastOuting: lastDate ? { date: lastDate, pitches: lastPitches, restNeeded: restNeeded, daysSince: daysSinceLast } : null,

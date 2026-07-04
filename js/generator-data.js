@@ -167,6 +167,10 @@
         ] },
       { minAge: 13, maxAge: 14, name: 'Long-Toss Base (13–14U)',
         weeks: { def: 6, min: 6, max: 6 }, dpw: { def: 4, min: 4, max: 4 },
+        // Weekly max-intent pull-downs (weeks 3–6) — same in-season lock as the
+        // weighted-ball and OU-bat blocks: game pitching + scheduled max-intent
+        // throwing don't stack.
+        offSeasonOnly: true,
         description: 'Week 1 ramps at 3 throwing days; weeks 2–6 run 4. Pull-downs 10–15 from week 3 (hold 10–15 weeks 5–6); flat-ground change-ups from week 3.',
         capNote: true,
         phases: [
@@ -191,6 +195,7 @@
         ] },
       { minAge: 15, maxAge: 99, name: 'Long-Toss Base (HS)',
         weeks: { def: 6, min: 6, max: 6 }, dpw: { def: 4, min: 4, max: 4 },
+        offSeasonOnly: true, // pull-downs weeks 3–6 = max-intent work
         description: 'Pull-downs from week 3, building to 20–25 in weeks 5–6.',
         capNote: true,
         phases: [
@@ -219,7 +224,10 @@
       // A < 13 handled by eligibility (LOCKED, substitute thr-base) — no variant.
       { minAge: 13, maxAge: 14, name: 'Velocity Foundations (13–14U)',
         weeks: { def: 8, min: 8, max: 8 }, dpw: { def: 4, min: 4, max: 4 }, pattern: [1, 3, 5, 6],
-        ageGateMin: 13, distExtend: true,
+        // Weekly max-intent pull-down day (weeks 5–8): in-season lock matches
+        // the 15–16 and 17+ velocity blocks — no age gets max-intent velocity
+        // work stacked on top of game pitching.
+        ageGateMin: 13, offSeasonOnly: true, distExtend: true,
         description: 'NOT a weighted-ball program: plyo drill patterns only (nothing over 1000 g, drill intent), long toss to the age cap, and 10–15 pull-downs on ONE day per week starting week 5. Lower body twice a week.',
         safety: ['No ball heavier than 5 oz is ever thrown at max intent at this age.',
           'Pull-downs are the only max-intent work, weeks 5–8, one day per week.'],
@@ -662,7 +670,9 @@
   };
 
   window.CT.generatorData = {
-    RULES_VERSION: 1,
+    // v2: throwing variants with max-intent pull-downs (thr-base 13+, thr-velo
+    // 13–14) became offSeasonOnly — in-season gating is now consistent at all ages.
+    RULES_VERSION: 2,
     PATTERNS: PATTERNS,
     DIST_CAP: DIST_CAP,
     CALENDAR_NOTE: CALENDAR_NOTE,

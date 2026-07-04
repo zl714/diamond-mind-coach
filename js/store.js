@@ -219,6 +219,15 @@
 
   // Everything one player owns, keyed by collection (driven by the declarative
   // playerFk registry). Used by cascade-delete (undo snapshot) + player export.
+  // Programs the generator built FOR this player (source 'generated' +
+  // generatorMeta.playerId). They're player-specific by construction — name,
+  // percentiles, and gates are baked in — so they cascade with the player.
+  function generatedProgramsFor(playerId) {
+    return (getState().programs || []).filter(function (p) {
+      return p.source === 'generated' && p.generatorMeta && p.generatorMeta.playerId === playerId;
+    });
+  }
+
   function playerSnapshot(playerId) {
     const player = getById('players', playerId);
     if (!player) return null;
@@ -228,6 +237,18 @@
       if (!fk) return;
       removed[name] = (getState()[name] || []).filter(function (r) { return r[fk] === playerId; });
     });
+    // Generated player-named programs + any OTHER player's assignments to them
+    // (both would be misleading orphans once the player is gone).
+    const genPrograms = generatedProgramsFor(playerId);
+    if (genPrograms.length) {
+      removed.programs = genPrograms;
+      const progIds = {};
+      genPrograms.forEach(function (p) { progIds[p.id] = true; });
+      const extraAssigns = (getState().programAssignments || []).filter(function (a) {
+        return progIds[a.programId] && a.playerId !== playerId;
+      });
+      removed.programAssignments = (removed.programAssignments || []).concat(extraAssigns);
+    }
     return { player: deepClone(player), removed: deepClone(removed) };
   }
 
@@ -243,6 +264,15 @@
       if (!fk) return;
       next[name] = (getState()[name] || []).filter(function (r) { return r[fk] !== playerId; });
     });
+    // Cascade this player's generated programs (and any assignment pointing at
+    // them) — they never belong in the shared library after the player is gone.
+    const genIds = {};
+    generatedProgramsFor(playerId).forEach(function (p) { genIds[p.id] = true; });
+    if (Object.keys(genIds).length) {
+      next.programs = (getState().programs || []).filter(function (p) { return !genIds[p.id]; });
+      next.programAssignments = (next.programAssignments || getState().programAssignments || [])
+        .filter(function (a) { return !genIds[a.programId]; });
+    }
     commit(next);
     return snapshot;
   }

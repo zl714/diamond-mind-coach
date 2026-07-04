@@ -114,8 +114,11 @@
       '<div class="kpi"><div class="k">Remaining today</div>' +
         '<div class="v num" style="color:' + remColor + ';">' + v.remainingToday +
         ' <span style="font-size:var(--fs-data);color:var(--text-secondary);font-weight:var(--fw-regular);">/ ' + v.dailyMax + '</span></div></div>' +
+      // restEligibleInDays counts a SAME-DAY outing's rest requirement too
+      // (daysUntilEligible only starts the day after) — a kid who threw 85
+      // today shows "4d", never a misleading "Now".
       '<div class="kpi"><div class="k">Days until eligible</div>' +
-        '<div class="v num">' + (v.daysUntilEligible > 0 ? v.daysUntilEligible + 'd' : 'Now') + '</div></div>' +
+        '<div class="v num">' + ((v.restEligibleInDays || v.daysUntilEligible) > 0 ? (v.restEligibleInDays || v.daysUntilEligible) + 'd' : 'Now') + '</div></div>' +
       '<div class="kpi"><div class="k">ACWR (7d:28d)</div>' +
         '<div class="v" style="font-size:var(--fs-h4);"><span class="num">' + acwrRatio + '</span> ' + ui.pill(v.acwr.zone, acwrTone(v.acwr.zone)) + '</div></div>' +
       '<div class="kpi"><div class="k">Consecutive days</div>' +

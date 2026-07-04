@@ -461,7 +461,9 @@ small, .muted { color: var(--text-secondary); }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
 .kpi { background: var(--surface-3); border: 1px solid var(--border-subtle); border-radius: var(--r-card); padding: var(--sp-3); min-width: 0; overflow: hidden; }
-.kpi .k { color: var(--text-muted); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); overflow-wrap: anywhere; }
+/* KPI labels never break mid-word (ADHERENC/E): 10px + tighter tracking fits
+   "ADHERENCE" in a 3-up card well; nowrap+ellipsis is the last-resort guard. */
+.kpi .k { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi .v { color: var(--text-hi); font-size: var(--fs-h4); font-weight: var(--fw-semibold); margin-top: var(--sp-1); }
 .kv-row { display: flex; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--divider); }
 .kv-row .k { color: var(--text-secondary); }
@@ -670,6 +672,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-600); }
    FOOTER + BACK LINK
    ============================================================ */
 .site-footer { max-width: var(--maxw); margin: 0 auto; padding: var(--sp-6) var(--sp-8) var(--sp-8); text-align: center; }
+/* Desktop shows the same line in the sidebar footer — don't repeat it per page. */
+@media (min-width: 768px) {
+  .site-footer { display: none; }
+  .qa-mobile-tools { display: none; }
+}
+.qa-mobile-tools { border-top: 1px solid var(--divider); }
 .site-footer p { color: var(--text-muted); font-size: var(--fs-label); margin: 0; }
 .back-link { display: inline-flex; align-items: center; gap: var(--sp-1); font-weight: var(--fw-medium); margin-bottom: var(--sp-3); color: var(--text-secondary); }
 .back-link:hover { color: var(--accent-700); }
@@ -769,6 +777,26 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-600); }
      just duplicates Sessions) is retired to avoid covering the middle tab. */
   .quick-log-fab { display: none; }
   .modal-overlay { align-items: flex-end; }
+  /* Bottom-sheet modals pin Save/Cancel in the thumb zone — the primary CTA
+     must never sit two screens below the drills list. */
+  .modal .modal-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface-raised, #fff);
+    padding: var(--sp-3) 0 var(--sp-2);
+    margin-top: var(--sp-4);
+    box-shadow: 0 -8px 16px -12px rgba(15, 23, 42, 0.35);
+    z-index: 2;
+  }
+  /* Horizontally scrolling program grids get an explicit swipe hint — columns
+     otherwise cut off mid-word with no affordance that more days exist. */
+  .pb-grid::before {
+    content: 'Swipe sideways to see every day \2192';
+    display: block;
+    color: var(--text-muted);
+    font-size: var(--fs-label);
+    margin-bottom: var(--sp-2);
+  }
 }
 @media (min-width: 768px) {
   .modal-overlay { align-items: center; padding: var(--sp-4); }
@@ -1627,3 +1655,20 @@ a.onboard-step:hover { transform: translateY(-1px); border-color: var(--border);
 .gen-pick-list { display: flex; flex-direction: column; }
 .gen-pick-list .qa-item { border-bottom: 1px solid var(--divider); }
 .gen-pick-list .qa-item:last-child { border-bottom: none; }
+
+/* ---- Drill library toolbar (search + category jump) ---- */
+.lib-toolbar { display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.lib-search { position: relative; display: flex; align-items: center; }
+.lib-search svg, .lib-search i { position: absolute; left: 10px; width: 16px; height: 16px; color: var(--text-muted); pointer-events: none; }
+.lib-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-2) 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--text-strong);
+  font: inherit;
+}
+.lib-search input:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+.lib-jump { display: flex; flex-wrap: wrap; gap: var(--sp-1); }

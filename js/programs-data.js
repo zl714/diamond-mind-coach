@@ -165,15 +165,47 @@
     return Math.floor((e - s) / 86400000);
   }
 
+  // Last calendar day of an assignment (startDate + weeks*7 − 1). Null when
+  // the schedule can't be derived.
+  function endDateFor(program, assignment) {
+    if (!program || !assignment || !assignment.startDate) return null;
+    const weeks = Math.max(1, Number(program.weeks) || 1);
+    const d = new Date(assignment.startDate + 'T00:00:00');
+    d.setDate(d.getDate() + weeks * 7 - 1);
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d - tz).toISOString().slice(0, 10);
+  }
+
+  // An assignment whose program block is fully over — Today rows and adherence
+  // alerts must ignore these (and the app auto-completes them at boot).
+  function isEnded(program, assignment, asOf) {
+    const end = endDateFor(program, assignment);
+    return !!end && (asOf || CT.todayISO()) > end;
+  }
+
   // Sessions DUE for an assignment as of `asOf` (inclusive of the start day).
+  // Honors assignment.daysOfWeek when set (a Mon/Wed/Fri program created on a
+  // Saturday owes nothing until Monday); otherwise pro-rates by calendar days.
+  // Either way the count is clamped to the program's own length.
   function expectedSessions(program, assignment, asOf) {
     if (!program || !assignment) return 0;
     const perWeek = Math.max(0, Number(program.daysPerWeek) || 0);
     const weeks = Math.max(1, Number(program.weeks) || 1);
     if (perWeek === 0) return 0; // overlay-style: no scheduled sessions
-    const elapsed = daysBetween(assignment.startDate || CT.todayISO(), asOf || CT.todayISO());
+    const startISO = assignment.startDate || CT.todayISO();
+    const elapsed = daysBetween(startISO, asOf || CT.todayISO());
     if (elapsed < 0) return 0;
-    const due = Math.ceil(((elapsed + 1) * perWeek) / 7);
+    const lastDay = Math.min(elapsed, weeks * 7 - 1); // never accrue past the block
+    const dows = (assignment.daysOfWeek && assignment.daysOfWeek.length) ? assignment.daysOfWeek : null;
+    if (dows) {
+      const startDow = new Date(startISO + 'T00:00:00').getDay();
+      let due = 0;
+      for (let i = 0; i <= lastDay; i++) {
+        if (dows.indexOf((startDow + i) % 7) >= 0) due++;
+      }
+      return Math.min(weeks * perWeek, due);
+    }
+    const due = Math.ceil(((lastDay + 1) * perWeek) / 7);
     return Math.min(weeks * perWeek, due);
   }
 
@@ -215,6 +247,8 @@
     byTemplateId: byTemplateId,
     eligibility: eligibility,
     toProgram: toProgram,
+    endDateFor: endDateFor,
+    isEnded: isEnded,
     expectedSessions: expectedSessions,
     adherenceFor: adherenceFor,
     weekIndexFor: weekIndexFor,

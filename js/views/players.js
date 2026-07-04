@@ -112,11 +112,14 @@
       ui.formField({ type: 'text', name: 'name', label: 'Name', value: p.name, required: true, placeholder: 'Full name' }) +
       '<div class="field-row">' +
         ui.formField({ type: 'date', name: 'birthdate', label: 'Birthdate', value: p.birthdate, required: true }) +
-        ui.formField({ type: 'select', name: 'level', label: 'Level', value: p.level || 'youth', options: model.LEVELS }) +
+        ui.formField({ type: 'select', name: 'level', label: 'Level', value: p.level || 'youth',
+          options: model.LEVELS.map(function (l) { return { value: l, label: model.LEVEL_LABELS[l] || l }; }) }) +
       '</div>' +
       '<div class="field-row">' +
-        ui.formField({ type: 'select', name: 'bats', label: 'Bats', value: p.bats || 'R', options: ['R', 'L', 'S'] }) +
-        ui.formField({ type: 'select', name: 'throws', label: 'Throws', value: p.throws || 'R', options: ['R', 'L'] }) +
+        ui.formField({ type: 'select', name: 'bats', label: 'Bats', value: p.bats || 'R',
+          options: [{ value: 'R', label: 'Right' }, { value: 'L', label: 'Left' }, { value: 'S', label: 'Switch' }] }) +
+        ui.formField({ type: 'select', name: 'throws', label: 'Throws', value: p.throws || 'R',
+          options: [{ value: 'R', label: 'Right' }, { value: 'L', label: 'Left' }] }) +
       '</div>' +
       '<div class="field"><label>Positions</label>' +
         '<div class="pos-grid">' +
@@ -203,6 +206,7 @@
     ['dailyCheckIns', 'Check-ins'],
     ['anthroReadings', 'Growth readings'],
     ['programAssignments', 'Program assignments'],
+    ['programs', 'Generated programs (built for this player)'],
     ['battingStatLines', 'Batting lines'],
     ['pitchingAppearances', 'Pitching outings'],
     ['fieldingStatLines', 'Fielding lines']

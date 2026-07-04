@@ -234,8 +234,8 @@
     let html = '';
     if (progs.length || assigns.length) {
       html += '<div class="stats">' +
-        ui.statTile(String(progs.length), 'Programs') +
-        ui.statTile(String(assigns.length), 'Active assignments') +
+        ui.statTile(String(progs.length), progs.length === 1 ? 'Program' : 'Programs') +
+        ui.statTile(String(assigns.length), assigns.length === 1 ? 'Active assignment' : 'Active assignments') +
         ui.statTile(teamAdh == null ? '—' : teamAdh + '%', 'Team adherence') +
         '</div>';
     }
@@ -259,10 +259,14 @@
         progs.length ? 'Hit "Assign" on a program to put players on it.' : 'Build a program first, then assign players to it.');
     } else {
       html += '<div class="grid-cards">' + visible.map(assignmentCard).join('') + '</div>';
+      // Only draw the chart when there is something to plot — a 0-100 axis
+      // with zero bars reads as broken, not empty.
       html += ui.card({
         title: 'Program adherence',
         subtitle: 'Logged vs. due sessions per player (team process, not a leaderboard)',
-        body: '<div class="chart-wrap"><canvas id="pgm-adherence"></canvas></div>'
+        body: teamDue > 0
+          ? '<div class="chart-wrap"><canvas id="pgm-adherence"></canvas></div>'
+          : '<div class="pgm-note" style="margin:0;">No due sessions yet — adherence appears after the first scheduled training day.</div>'
       });
     }
 
@@ -352,37 +356,92 @@
     return '<li class="pgm-item"><i data-lucide="check-square"></i>' + esc(it.text) + '</li>';
   }
 
+  // Week × day grid. Mirrors the wizard preview: identical consecutive weeks
+  // collapse into one "Weeks 1–4" row (an 8-week generated block renders 2
+  // groups, not 8 full weeks), and day columns use the assignment's real
+  // weekday names when the schedule is fixed.
   function detailGrid(p) {
     const weeks = Math.max(1, p.weeks || 1);
     const perWeek = Math.max(1, p.daysPerWeek || 1);
-    let rows = '';
+    // Weekday labels: the program's first assignment with fixed days wins;
+    // generated programs fall back to the generator's default pattern.
+    let pattern = null;
+    const withDays = store.where('programAssignments', 'programId', p.id)
+      .find(function (a) { return a.daysOfWeek && a.daysOfWeek.length; });
+    if (withDays) pattern = withDays.daysOfWeek.slice().sort(function (a, b) { return a - b; });
+    else if (p.source === 'generated' && CT.generatorData) pattern = CT.generatorData.PATTERNS[perWeek] || null;
+    function dayLabel(d) {
+      return (pattern && pattern[d] != null) ? DOW[pattern[d]] : 'Day ' + (d + 1);
+    }
+
+    // Content signature per item — deliberately EXCLUDES the per-row item ids
+    // (every day's items carry unique ids, which would defeat week grouping).
+    function itemSig(it) {
+      return it.kind === 'drill'
+        ? ['d', it.drillId, it.sets, it.reps, it.notes].join('~')
+        : ['s', it.text].join('~');
+    }
+
+    // Resolve every week once, with a content signature for grouping.
+    const weekCells = [], weekSig = [];
     for (let w = 0; w < weeks; w++) {
       let cells = '';
-      let weekHasOwn = false;
+      const sig = [];
       for (let d = 0; d < perWeek; d++) {
         const own = (p.days || []).find(function (x) { return x.weekIndex === w && x.dayIndex === d && (x.items || []).length; });
-        if (own) weekHasOwn = true;
         const day = programs.dayFor(p, w, d);
         const items = day && day.items ? day.items : [];
+        sig.push([day && day.title, day && day.intensity, items.map(itemSig).join('|')].join('#'));
         cells += '<div class="pb-day pgm-day-read' + (own ? '' : ' pgm-day-inherit') + '">' +
-          '<div class="pb-day-head" style="cursor:default;">Day ' + (d + 1) + (own || w === 0 ? '' : ' <span class="pb-sel-tag">wk 1</span>') +
+          '<div class="pb-day-head" style="cursor:default;">' + esc(dayLabel(d)) +
             (day && day.intensity ? ' ' + intChip(day.intensity) : '') + '</div>' +
           (day && day.title ? '<div class="gen-day-title">' + esc(day.title) + '</div>' : '') +
           (items.length ? '<ul class="pgm-items">' + items.map(itemLine).join('') + '</ul>' : '<div class="pb-empty muted">Rest / free</div>') +
         '</div>';
       }
-      // Collapse identical repeat weeks: show week 1, then one "repeats" row.
-      if (w > 0 && !weekHasOwn) {
-        rows += '<div class="pb-week pgm-week-repeat"><div class="pb-week-label">Week <span class="num">' + (w + 1) + '</span></div>' +
-          '<div class="pgm-note" style="margin:0;">Repeats week 1\'s pattern.</div></div>';
-        continue;
-      }
+      weekCells.push(cells);
+      weekSig.push(sig.join('|'));
+    }
+
+    let rows = '', w = 0;
+    while (w < weeks) {
+      let end = w;
+      while (end + 1 < weeks && weekSig[end + 1] === weekSig[w]) end++;
+      const label = end > w
+        ? 'Weeks <span class="num">' + (w + 1) + '–' + (end + 1) + '</span>'
+        : 'Week <span class="num">' + (w + 1) + '</span>';
       rows += '<div class="pb-week">' +
-        '<div class="pb-week-label">Week <span class="num">' + (w + 1) + '</span></div>' +
-        '<div class="pb-week-days" style="grid-template-columns:repeat(' + perWeek + ',minmax(180px,1fr));">' + cells + '</div>' +
+        '<div class="pb-week-label">' + label + '</div>' +
+        '<div class="pb-week-days" style="grid-template-columns:repeat(' + perWeek + ',minmax(180px,1fr));">' + weekCells[w] + '</div>' +
       '</div>';
+      w = end + 1;
     }
     return '<div class="pb-grid">' + rows + '</div>';
+  }
+
+  // Structured program description (matches the wizard preview): the why-line
+  // becomes a callout, SAFETY lines become iconed rows, everything else is a
+  // normal paragraph — never one dense run-on block.
+  function descriptionHtml(program) {
+    const raw = String(program.description || '');
+    if (!raw.trim()) return '';
+    const lines = raw.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    let why = '';
+    const safety = [], rest = [];
+    lines.forEach(function (l) {
+      if (l.indexOf('Why this program:') === 0) why = l;
+      else if (l.indexOf('SAFETY:') === 0) safety.push(l.slice('SAFETY:'.length).trim());
+      else rest.push(l);
+    });
+    let html = '';
+    if (why) html += '<div class="gen-why"><i data-lucide="sparkles"></i><span>' + esc(why) + '</span></div>';
+    if (rest.length) html += '<p class="muted" style="margin-top:0;">' + esc(rest.join(' ')) + '</p>';
+    if (safety.length) {
+      html += '<div class="gen-safety">' + safety.map(function (s) {
+        return '<div class="gen-safety-row"><i data-lucide="shield-alert"></i><span>' + esc(s) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    return html;
   }
 
   function renderDetail(root, program) {
@@ -393,12 +452,12 @@
         rawTitle: true,
         title: esc(program.name) + ' ' + (program.source === 'generated' ? generatedPill() + ' ' : '') + typePill(program.type),
         subtitle: program.weeks + ' weeks × ' + Math.max(1, program.daysPerWeek) + ' days/week' +
-          (program.ageGateMin != null ? ' · hard age gate ' + program.ageGateMin + '+' : ''),
+          (program.ageGateMin != null ? ' · ages ' + program.ageGateMin + '+ only' : ''),
         actions:
           '<button class="btn btn-primary btn-sm" data-act="assign-detail"><i data-lucide="user-plus"></i>Assign</button>' +
           '<a class="btn btn-sm" href="#/programs/edit/' + esc(program.id) + '"><i data-lucide="pencil"></i>Edit</a>',
         body:
-          (program.description ? '<p class="muted" style="margin-top:0;">' + esc(program.description) + '</p>' : '') +
+          descriptionHtml(program) +
           (program.clinicianRequired ? referralBlock('Clinician supervision REQUIRED.') : '') +
           detailGrid(program)
       });
