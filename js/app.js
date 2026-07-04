@@ -25,7 +25,7 @@
     dashboard: 'layout-dashboard',
     players: 'users',
     assess: 'gauge',
-    sessions: 'clipboard-list',
+    programs: 'clipboard-list',
     games: 'diamond',
     armsafety: 'shield',
     // secondary / hidden (kept for any stray icon paint)
@@ -83,8 +83,9 @@
     const id = parsed.id, param = parsed.param;
     switch (id) {
       case 'roster': return '#/players' + (param ? '/' + param : '');
-      case 'drills': return '#/sessions/drills';
-      case 'programs': return '#/sessions/programs';
+      case 'drills': return '#/programs/drills';
+      // Old Sessions wrapper (#/sessions[/drills|/programs]) -> Programs.
+      case 'sessions': return param === 'drills' ? '#/programs/drills' : '#/programs';
       case 'season': return '#/games/season';
       // Old assessment entry (#/assessment[/playerId]) -> new Assessments view.
       case 'assessment': return '#/assess' + (param ? '/' + param : '');
@@ -256,9 +257,9 @@
         'Erase ALL players, sessions, games, drills, and programs? This cannot be undone — export a backup first if you want one.',
         'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your players in Players'); route(); });
     });
-    // Quick-log '+': jump to Sessions (drill/session builder).
+    // Quick-log '+': jump to Programs (assignments + Log-Session launchers).
     const ql = document.getElementById('quick-log');
-    if (ql) ql.addEventListener('click', function () { navigate('#/sessions'); });
+    if (ql) ql.addEventListener('click', function () { navigate('#/programs'); });
   }
 
   function init() {

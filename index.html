@@ -92,21 +92,23 @@
   <script src="js/app.js"></script>
 
   <!-- Feature views: each nav view calls CT.registerView() on load (registration
-       order = sidebar order). Child views (drills/programs/season) expose their
-       render on CT.views and are hosted inside the Sessions/Games wrappers instead
-       of being nav destinations. Hidden views (player profile, assessment, alerts)
+       order = sidebar order). Child views (drill library, program builder, season)
+       expose their render on CT.views and are hosted inside the Programs/Games
+       views instead of being nav destinations; session-log.js is the shared
+       Log-Session modal (CT.sessionLog). Hidden views (player profile, alerts)
        register with { hidden:true }: routable, but not in the nav.
        The router try/catches each render so one broken view never blanks the app. -->
-  <script src="js/views/dashboard.js"></script>   <!-- nav 1: status dashboard -->
-  <script src="js/views/players.js"></script>     <!-- nav 2: roster (flat cards) -->
-  <script src="js/views/assess.js"></script>      <!-- nav 3: Assessments (modular flow + history) -->
-  <script src="js/views/drills.js"></script>      <!-- child of Sessions -->
-  <script src="js/views/programs.js"></script>    <!-- child of Sessions -->
-  <script src="js/views/sessions.js"></script>    <!-- nav 4: Sessions wrapper -->
-  <script src="js/views/season.js"></script>      <!-- child of Games -->
-  <script src="js/views/games.js"></script>       <!-- nav 5: Games (+ Season tab) -->
-  <script src="js/views/armsafety.js"></script>   <!-- nav 6: Arm Safety -->
-  <script src="js/views/player.js"></script>      <!-- hidden: player profile -->
-  <script src="js/views/alerts.js"></script>      <!-- hidden page + CT.alerts.build for the bell -->
+  <script src="js/views/dashboard.js"></script>       <!-- nav 1: status dashboard + Today panel -->
+  <script src="js/views/players.js"></script>         <!-- nav 2: roster (flat cards) -->
+  <script src="js/views/assess.js"></script>          <!-- nav 3: Assessments (modular flow + history) -->
+  <script src="js/views/session-log.js"></script>     <!-- shared Log-Session modal (CT.sessionLog) -->
+  <script src="js/views/drill-library.js"></script>   <!-- child of Programs (#/programs/drills) -->
+  <script src="js/views/program-builder.js"></script> <!-- child of Programs (#/programs/new|edit) -->
+  <script src="js/views/programs.js"></script>        <!-- nav 4: Programs hub -->
+  <script src="js/views/season.js"></script>          <!-- child of Games -->
+  <script src="js/views/games.js"></script>           <!-- nav 5: Games (+ Season tab) -->
+  <script src="js/views/armsafety.js"></script>       <!-- nav 6: Arm Safety (+ #/armsafety/checkin) -->
+  <script src="js/views/player.js"></script>          <!-- hidden: player profile -->
+  <script src="js/views/alerts.js"></script>          <!-- hidden page + CT.alerts.build for the bell -->
 </body>
 </html>

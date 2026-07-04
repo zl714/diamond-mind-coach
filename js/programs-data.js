@@ -187,6 +187,28 @@
     return { done: done, due: due, pct: due ? Math.round((done / due) * 100) : null };
   }
 
+  // Which week of the program an assignment is in as of `asOf` (0-based, clamped).
+  function weekIndexFor(assignment, program, asOf) {
+    if (!program || !program.weeks) return 0;
+    const start = new Date((assignment && assignment.startDate ? assignment.startDate : CT.todayISO()) + 'T00:00:00');
+    const now = new Date((asOf || CT.todayISO()) + 'T00:00:00');
+    const diffDays = Math.floor((now - start) / 86400000);
+    return Math.max(0, Math.min(program.weeks - 1, Math.floor(diffDays / 7)));
+  }
+
+  // Resolve the day plan for (weekIndex, dayIndex). Weeks left empty in the
+  // builder fall back to week 1's pattern, then to the program's first day —
+  // so a coach who fills only week 1 still gets a plan every week.
+  function dayFor(program, weekIndex, dayIndex) {
+    if (!program || !Array.isArray(program.days) || !program.days.length) return null;
+    const days = program.days;
+    let hit = days.find(function (d) { return d.weekIndex === weekIndex && d.dayIndex === dayIndex; });
+    if (hit && hit.items && hit.items.length) return hit;
+    hit = days.find(function (d) { return d.weekIndex === 0 && d.dayIndex === dayIndex; });
+    if (hit && hit.items && hit.items.length) return hit;
+    return days[0] || null;
+  }
+
   window.CT.programs = {
     CATEGORIES: CATEGORIES,
     templates: templates,
@@ -194,6 +216,8 @@
     eligibility: eligibility,
     toProgram: toProgram,
     expectedSessions: expectedSessions,
-    adherenceFor: adherenceFor
+    adherenceFor: adherenceFor,
+    weekIndexFor: weekIndexFor,
+    dayFor: dayFor
   };
 })();

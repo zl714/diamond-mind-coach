@@ -258,6 +258,128 @@
     });
   }
 
+  // ----- daily check-in (arm-health data lives with Arm Safety) -----
+  // Arm-pain reported at/above this 0-10 level escalates to a pain alert.
+  const PAIN_THRESHOLD = 3;
+
+  function painFlagged(c) {
+    return !!(c && (c.armPain || (c.soreness != null && c.soreness >= 8)));
+  }
+
+  function referralBlock(text) {
+    return '<div class="pgm-referral"><i data-lucide="shield-alert"></i><span>' + esc(text) + '</span></div>';
+  }
+
+  function openCheckIn(presetPlayer) {
+    const players = store.getPlayers();
+    if (!players.length) { ui.toast('Add players first (Players).'); return; }
+    const playerOptions = players.map(function (p) { return { value: p.id, label: p.name }; });
+
+    const html =
+      ui.formField({ type: 'select', name: 'playerId', label: 'Player', options: playerOptions, value: presetPlayer ? presetPlayer.id : players[0].id }) +
+      '<div class="field-row">' +
+        ui.formField({ type: 'number', name: 'sleepHours', label: 'Sleep (hrs)', value: '', min: 0, max: 14, step: 0.5, placeholder: 'e.g. 8.5' }) +
+        ui.formField({ type: 'number', name: 'mood', label: 'Readiness (1-5)', value: '', min: 1, max: 5, step: 1, placeholder: '1 low – 5 great' }) +
+      '</div>' +
+      '<div class="field-row">' +
+        ui.formField({ type: 'number', name: 'soreness', label: 'Soreness (0-10)', value: '', min: 0, max: 10, step: 1 }) +
+        ui.formField({ type: 'number', name: 'painLevel', label: 'Arm pain (0-10)', value: '', min: 0, max: 10, step: 1, help: 'Flags an alert at ' + PAIN_THRESHOLD + '+.' }) +
+      '</div>' +
+      ui.formField({ type: 'text', name: 'painLocation', label: 'Pain location (if any)', value: '', placeholder: 'e.g. medial elbow' }) +
+      '<div id="pain-note"></div>' +
+      '<div class="modal-actions">' +
+        '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
+        '<button class="btn btn-primary" data-act="save"><i data-lucide="clipboard-check"></i>Save check-in</button>' +
+      '</div>';
+
+    ui.openModal('Daily check-in', html, function (modal, close) {
+      const painInput = modal.querySelector('[name="painLevel"]');
+      const note = modal.querySelector('#pain-note');
+      function refreshNote() {
+        const v = Number(painInput.value);
+        if (painInput.value !== '' && v >= PAIN_THRESHOLD) {
+          note.innerHTML = referralBlock('Arm pain ' + v + '/10 — shut down throwing and refer to a sports-medicine clinician before returning. This creates a pain alert (see Alerts).');
+          if (window.lucide) { try { window.lucide.createIcons(); } catch (e) {} }
+        } else {
+          note.innerHTML = '';
+        }
+      }
+      painInput.addEventListener('input', refreshNote);
+
+      modal.querySelector('[data-act="cancel"]').addEventListener('click', close);
+      modal.querySelector('[data-act="save"]').addEventListener('click', function () {
+        const get = function (n) { const el = modal.querySelector('[name="' + n + '"]'); return el ? el.value.trim() : ''; };
+        const pidVal = get('playerId');
+        if (!pidVal) { ui.toast('Pick a player.'); return; }
+        const painLevel = get('painLevel') === '' ? null : Number(get('painLevel'));
+        const flagged = painLevel != null && painLevel >= PAIN_THRESHOLD;
+        const sleep = get('sleepHours'), mood = get('mood'), sore = get('soreness');
+        store.insert('dailyCheckIns', {
+          playerId: pidVal,
+          date: CT.todayISO(),
+          sleepHours: sleep === '' ? null : Number(sleep),
+          mood: mood === '' ? null : Number(mood),
+          soreness: sore === '' ? null : Number(sore),
+          painLevel: painLevel,           // v3: raw 0-10 pain is a real schema field
+          armPain: flagged,
+          painLocation: flagged ? get('painLocation') : '',
+          notes: ''
+        });
+        close();
+        if (flagged) ui.toast('Pain alert created — refer to clinician');
+        else ui.toast('Check-in saved');
+        CT.router.route();
+      });
+    });
+  }
+
+  function checkInRow(c) {
+    const player = store.getPlayer(c.playerId);
+    const flagged = painFlagged(c);
+    return '<tr>' +
+      '<td>' + esc(player ? player.name : '—') + '</td>' +
+      '<td>' + esc(CT.relativeDate(c.date)) + '</td>' +
+      '<td class="num">' + (c.sleepHours == null ? '—' : esc(c.sleepHours) + 'h') + '</td>' +
+      '<td class="num">' + (c.mood == null ? '—' : esc(c.mood) + '/5') + '</td>' +
+      '<td class="num">' + (c.soreness == null ? '—' : esc(c.soreness) + '/10') + '</td>' +
+      '<td>' + (flagged
+        ? ui.pill('Pain' + (c.painLevel != null ? ' ' + c.painLevel + '/10' : '') + (c.painLocation ? ' · ' + c.painLocation : ''), 'red')
+        : '<span class="muted">—</span>') + '</td>' +
+    '</tr>';
+  }
+
+  function renderCheckIn(root) {
+    const all = store.all('dailyCheckIns').slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+    const flagged = all.filter(painFlagged);
+
+    let html = ui.pageHead('Daily Check-In', 'Sleep · readiness · soreness · arm pain (arm-health data lives here)') +
+      '<a class="back-link" href="#/armsafety"><i data-lucide="chevron-left"></i>Arm Safety console</a>';
+
+    html += ui.card({
+      title: 'Daily check-in',
+      subtitle: '1-2 tap wellness log per player',
+      body: '<p class="muted" style="font-size:var(--fs-sm);">Arm pain at ' + PAIN_THRESHOLD + '/10 or above auto-escalates to a pain alert with a medical-referral note.</p>' +
+        '<button class="btn btn-primary" data-act="new-checkin"><i data-lucide="plus"></i>New check-in</button>'
+    });
+
+    if (flagged.length) {
+      html += '<div style="margin-top:var(--sp-4);">' +
+        referralBlock(flagged.length + ' active pain flag(s). Per youth-safety protocol: stop throwing and refer to a sports-medicine clinician. See Alerts for the full list.') +
+        '</div>';
+    }
+
+    html += '<div style="margin-top:var(--sp-4);">' + ui.card({
+      title: 'Recent check-ins',
+      body: all.length
+        ? '<div class="table-wrap"><table class="ct-table"><thead><tr><th>Player</th><th>When</th><th class="num">Sleep</th><th class="num">Ready</th><th class="num">Soreness</th><th>Pain</th></tr></thead><tbody>' +
+            all.slice(0, 20).map(checkInRow).join('') + '</tbody></table></div>'
+        : '<p class="muted">No check-ins yet.</p>'
+    }) + '</div>';
+
+    root.innerHTML = html;
+    root.querySelector('[data-act="new-checkin"]').addEventListener('click', function () { openCheckIn(null); });
+  }
+
   // ----- one player's console card -----
   function consoleCard(player) {
     const logs = store.byPlayer('workloadLogs', player.id);
@@ -298,6 +420,9 @@
 
   // ----- main render -----
   function render(root, ctx) {
+    // #/armsafety/checkin — the daily wellness / arm-pain log lives here now.
+    if (ctx && ctx.param === 'checkin') { renderCheckIn(root); return; }
+
     let players = consolePlayers();
 
     // Deep link #/armsafety/<playerId> focuses a single arm.
@@ -307,8 +432,10 @@
       if (focused) players = [focused];
     }
 
+    const checkinBtn = '<a class="btn" href="#/armsafety/checkin"><i data-lucide="heart-pulse"></i>Daily check-in</a>';
+
     if (!players.length) {
-      root.innerHTML = ui.pageHead('Arm Safety', 'Pitch Smart workload & ACWR') +
+      root.innerHTML = ui.pageHead('Arm Safety', 'Pitch Smart workload & ACWR', checkinBtn) +
         ui.emptyState('shield', 'No arms to monitor yet',
           'Add a pitcher (or log any throwing workload) to see the Pitch Smart clearance console.',
           '<a class="btn btn-primary" href="#/players"><i data-lucide="user-plus"></i>Go to Players</a>');
@@ -319,7 +446,7 @@
       ? 'Pitch Smart console — ' + focused.name
       : players.length + ' arm(s) monitored · MLB/USA Baseball Pitch Smart';
 
-    let html = ui.pageHead('Arm Safety — Cleared to Pitch?', subtitle);
+    let html = ui.pageHead('Arm Safety — Cleared to Pitch?', subtitle, checkinBtn);
     if (focused) html += '<a class="back-link" href="#/armsafety"><i data-lucide="arrow-left"></i>All arms</a>';
     else html += summaryStrip(players);
 
@@ -354,4 +481,6 @@
   }
 
   CT.registerView('armsafety', { label: 'Arm Safety', render: render });
+  // Shared launcher so other views (player profile, dashboard) can open it.
+  window.CT.checkin = { open: openCheckIn };
 })();

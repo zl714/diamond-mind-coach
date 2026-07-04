@@ -124,6 +124,60 @@
     '</div>';
   }
 
+  // ---------- today's program sessions (one-tap log) ----------
+  // An assignment is "due today" when it's active, has scheduled days, and
+  // either today matches its daysOfWeek or the schedule is flexible (any day).
+  function dueTodayRows() {
+    const todayDow = new Date().getDay();
+    const todayStr = CT.todayISO();
+    const rows = [];
+    store.query('programAssignments', function (a) { return a.status === 'active'; }).forEach(function (a) {
+      const prog = store.getById('programs', a.programId);
+      const player = store.getPlayer(a.playerId);
+      if (!prog || !player) return;
+      if ((prog.daysPerWeek || 0) === 0) return;                    // overlay — nothing to log
+      if (a.startDate && a.startDate > todayStr) return;            // hasn't started
+      if (a.daysOfWeek && a.daysOfWeek.length && a.daysOfWeek.indexOf(todayDow) < 0) return;
+      const logged = store.where('sessionLogs', 'assignmentId', a.id)
+        .some(function (l) { return l.date === todayStr; });
+      const wk = CT.programs.weekIndexFor(a, prog);
+      rows.push({ a: a, player: player, prog: prog, logged: logged, week: wk });
+    });
+    rows.sort(function (x, y) { return (x.logged === y.logged) ? (x.player.name < y.player.name ? -1 : 1) : (x.logged ? 1 : -1); });
+    return rows;
+  }
+
+  function todayPanelHtml(rows) {
+    if (!rows.length) return '';
+    const items = rows.map(function (r) {
+      return '<div class="today-row">' +
+        '<div class="today-who">' +
+          '<span class="today-name">' + esc(r.player.name) + '</span>' +
+          '<span class="today-prog muted">' + esc(r.prog.name) + ' · week <span class="num">' + (r.week + 1) + '</span>/<span class="num">' + r.prog.weeks + '</span></span>' +
+        '</div>' +
+        (r.logged
+          ? ui.pill('Logged', 'green')
+          : '<button class="btn btn-sm btn-primary" data-act="log-today" data-aid="' + esc(r.a.id) + '"><i data-lucide="clipboard-check"></i>Log</button>') +
+      '</div>';
+    }).join('');
+    const due = rows.filter(function (r) { return !r.logged; }).length;
+    return ui.card({
+      title: 'Today',
+      subtitle: due ? (due + ' program session' + (due === 1 ? '' : 's') + ' due today') : 'All of today\'s sessions are logged',
+      body: '<div class="today-list">' + items + '</div>',
+      className: 'today-panel'
+    });
+  }
+
+  function wireTodayPanel(root) {
+    root.querySelectorAll('[data-act="log-today"]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const a = store.getById('programAssignments', b.getAttribute('data-aid'));
+        if (a && CT.sessionLog) CT.sessionLog.open({ playerId: a.playerId, assignmentId: a.id });
+      });
+    });
+  }
+
   // ---------- team-wide recent activity ----------
   function battingSummary(l) {
     const seg = (l.h || 0) + '-' + (l.ab || 0);
@@ -140,8 +194,16 @@
     players.forEach(function (p) {
       store.sessionLogsForPlayer(p.id).forEach(function (l) {
         const n = (l.extraDrillIds || []).length;
+        let fallback;
+        if (l.assignmentId) {
+          const a = store.getById('programAssignments', l.assignmentId);
+          const prog = a ? store.getById('programs', a.programId) : null;
+          fallback = (prog ? prog.name : 'Program') + ' session' + (l.throws ? ' · ' + l.throws + ' throws' : '');
+        } else {
+          fallback = n ? n + ' drill' + (n === 1 ? '' : 's') + ' worked' : 'Coaching session';
+        }
         events.push({ date: l.date, sort: l.date + '_2', dot: 'var(--accent-500)', pid: p.id,
-          title: p.name + ' — session', outcome: l.notes || (n + ' drill' + (n === 1 ? '' : 's') + ' completed') });
+          title: p.name + ' — session', outcome: l.notes || fallback });
       });
       store.byPlayer('assessmentSessions', p.id).forEach(function (a) {
         const rs = store.byPlayer('metricReadings', p.id).filter(function (r) { return r.assessmentSessionId === a.id && !r.voided; });
@@ -235,7 +297,7 @@
           'Name, birthdate, and positions — age bands drive benchmarks and Pitch Smart limits.') +
         onboardStep(2, hasAssessment, !hasPlayers, '#/assess/new', 'Run a first assessment',
           'Capture exit velo, throwing velo, and speed to baseline every player.') +
-        onboardStep(3, hasProgram, !hasPlayers, '#/sessions/programs', 'Assign a program',
+        onboardStep(3, hasProgram, !hasPlayers, '#/programs', 'Assign a program',
           'Arm care, long toss, or strength — adherence shows up here automatically.') +
       '</div>';
   }
@@ -259,15 +321,18 @@
 
     let html = ui.pageHead('Dashboard', 'Your program at a glance');
     html += heroHtml(r, alerts);
+    const todayRows = dueTodayRows();
+    html += todayPanelHtml(todayRows);
     html += tilesHtml(players, r, alerts);
     html += '<h2 class="dm-feed-title">Recent activity</h2>';
 
     const events = buildEvents(players).slice(0, 14);
     html += events.length ? feedHtml(events)
-      : ui.emptyState('activity', 'No activity yet', 'Log a lesson, assessment, or game to build the timeline.',
-          '<a class="btn btn-primary" href="#/sessions"><i data-lucide="plus"></i>Build a session</a>');
+      : ui.emptyState('activity', 'No activity yet', 'Log a session, assessment, or game to build the timeline.',
+          '<a class="btn btn-primary" href="#/programs"><i data-lucide="plus"></i>Assign a program</a>');
 
     root.innerHTML = html;
+    wireTodayPanel(root);
   }
 
   CT.registerView('dashboard', { label: 'Dashboard', render: render });

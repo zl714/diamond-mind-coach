@@ -224,6 +224,65 @@
     return '<div class="dm-tools">' + rows + '</div>';
   }
 
+  // ---------- training program (active assignment + progress + log) ----------
+  function programSectionHtml(player) {
+    const assigns = store.byPlayer('programAssignments', player.id)
+      .filter(function (a) { return a.status !== 'completed'; });
+    const adhocBtn = '<button class="btn btn-sm" data-act="prof-adhoc"><i data-lucide="clipboard-plus"></i>Ad-hoc session</button>';
+
+    if (!assigns.length) {
+      return ui.card({
+        title: 'Training program',
+        subtitle: 'No active program',
+        actions: adhocBtn,
+        body: '<p class="muted" style="margin:0;">Assign an arm-care, throwing, hitting, or strength block in ' +
+          '<a href="#/programs">Programs</a> to track weekly adherence here.</p>'
+      });
+    }
+
+    const rows = assigns.map(function (a) {
+      const prog = store.getById('programs', a.programId);
+      if (!prog) return '';
+      const logs = store.where('sessionLogs', 'assignmentId', a.id);
+      const adh = CT.programs.adherenceFor(prog, a, logs);
+      const wk = CT.programs.weekIndexFor(a, prog);
+      const overlay = (prog.daysPerWeek || 0) === 0;
+      const loggedToday = logs.some(function (l) { return l.date === CT.todayISO(); });
+      const dow = (a.daysOfWeek && a.daysOfWeek.length)
+        ? a.daysOfWeek.slice().sort().map(function (n) { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n]; }).join(' · ')
+        : 'flexible days';
+      const meter = adh.pct != null
+        ? '<div class="prof-pgm-meter">' + ui.diamondMeter(adh.pct, { small: true, label: 'Adherence ' + adh.pct + '%' }) +
+          '<span class="num" style="font-size:var(--fs-data);color:var(--text-strong);">' + adh.pct + '%</span></div>'
+        : '';
+      return '<div class="pgm-session">' +
+        '<div class="pgm-session-top">' +
+          '<div><strong>' + esc(prog.name) + '</strong>' +
+            ' <span class="muted" style="font-size:var(--fs-label);">· ' + esc(prog.type) +
+            ' · week <span class="num">' + (wk + 1) + '</span>/<span class="num">' + prog.weeks + '</span>' +
+            (adh.due ? ' · <span class="num">' + adh.done + '</span>/<span class="num">' + adh.due + '</span> due' : '') +
+            ' · ' + esc(dow) + '</span></div>' +
+          (a.status !== 'active' ? ui.pill('Paused', 'yellow')
+            : (overlay ? ui.pill('Overlay', 'neutral')
+              : (loggedToday ? ui.pill('Logged today', 'green') : ui.pill('Not logged', 'neutral')))) +
+        '</div>' +
+        meter +
+        (overlay || a.status !== 'active' ? '' :
+          '<div class="row" style="margin-top:var(--sp-2);">' +
+            '<button class="btn btn-sm ' + (loggedToday ? 'btn-ghost' : 'btn-primary') + '" data-act="prof-log" data-aid="' + esc(a.id) + '">' +
+              '<i data-lucide="clipboard-check"></i>' + (loggedToday ? 'Log another' : 'Log session') + '</button>' +
+          '</div>') +
+      '</div>';
+    }).join('');
+
+    return ui.card({
+      title: 'Training program',
+      subtitle: assigns.length + ' active assignment' + (assigns.length === 1 ? '' : 's'),
+      actions: adhocBtn + ' <a class="btn btn-sm" href="#/programs"><i data-lucide="arrow-right"></i>Programs</a>',
+      body: rows
+    });
+  }
+
   // ---------- metric-over-time card (kept from prior dashboard) ----------
   function metricCardHtml(p, m, jobs) {
     const readings = metricReadings(p.id, m.key);
@@ -449,10 +508,22 @@
       if (l.ratingDelta != null && l.ratingDelta !== 0) {
         deltas.push({ label: 'Rating', net: l.ratingDelta, unit: '', lowerBetter: false, raw: false });
       }
+      let progName = null;
+      if (l.assignmentId) {
+        const a = store.getById('programAssignments', l.assignmentId);
+        const prog = a ? store.getById('programs', a.programId) : null;
+        progName = prog ? prog.name : 'Program';
+      }
+      const title = progName
+        ? 'Program session — ' + progName + (l.programDayRef ? ' (wk ' + (l.programDayRef.weekIndex + 1) + ')' : '')
+        : 'Session — ' + (names.length ? names.length + ' drill' + (names.length === 1 ? '' : 's') + ' done' : 'coaching session');
+      const fallback = progName
+        ? (l.throws ? l.throws + ' throws logged' : 'Completed')
+        : (names.length ? names.join(', ') : 'Coaching session');
       events.push({
         date: l.date, sort: l.date + '_1', dot: 'var(--accent-500)',
-        title: 'Session — ' + (names.length ? names.length + ' drill' + (names.length === 1 ? '' : 's') + ' done' : 'coaching session'),
-        outcome: l.notes || (names.length ? names.join(', ') : 'Coaching session'),
+        title: title,
+        outcome: l.notes || fallback,
         meta: names.length ? names.join(' · ') : '',
         deltas: deltas
       });
@@ -598,6 +669,7 @@
         body: '<div id="dm-tools-slot">' + skelRows(5, 55) + '</div>' +
           '<div class="dash-note" style="margin-top:var(--sp-3);">' + esc(benchmarks.SOURCE_NOTE) + '</div>'
       }) +
+      programSectionHtml(player) +
       tabBar +
       '<div id="dash-tab-body"></div>' +
       '<h2 class="dm-feed-title">Activity</h2>' +
@@ -633,6 +705,18 @@
         feedEl.setAttribute('aria-busy', 'false');
       }
       repaintIcons();
+    });
+
+    // Training-program actions (shared Log-Session modal).
+    root.querySelectorAll('[data-act="prof-log"]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const a = store.getById('programAssignments', b.getAttribute('data-aid'));
+        if (a && CT.sessionLog) CT.sessionLog.open({ playerId: player.id, assignmentId: a.id });
+      });
+    });
+    const adhocBtn = root.querySelector('[data-act="prof-adhoc"]');
+    if (adhocBtn) adhocBtn.addEventListener('click', function () {
+      if (CT.sessionLog) CT.sessionLog.open({ playerId: player.id });
     });
 
     // Player switch -> deep link (full re-render via router).
