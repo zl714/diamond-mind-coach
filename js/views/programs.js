@@ -32,7 +32,7 @@
   ];
 
   // ----- small helpers ---------------------------------------------------------
-  function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
+  function isPitcher(p) { return model.isPitcher(p); }
 
   function cleanName(name) { return name || ''; } // demo prefixes no longer exist
 
@@ -42,17 +42,16 @@
     return store.query('programAssignments', function (a) { return a.status !== 'completed'; });
   }
 
-  function sessionsForAssignment(assignmentId) {
-    return store.where('programSessions', 'assignmentId', assignmentId)
+  // v3: program work is logged ON DEMAND as SessionLogs (never pre-generated).
+  function logsForAssignment(assignmentId) {
+    return store.where('sessionLogs', 'assignmentId', assignmentId)
       .slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; });
   }
 
-  // Adherence over sessions already due (date <= today): completed / due.
-  function adherence(sessions) {
-    const today = CT.todayISO();
-    const due = sessions.filter(function (s) { return s.planned && s.date <= today; });
-    const done = due.filter(function (s) { return s.completed; }).length;
-    return { done: done, due: due.length, pct: due.length ? Math.round((done / due.length) * 100) : null };
+  // Adherence = logged days vs the schedule-derived due count (programs-data.js).
+  function adherence(assignment) {
+    const prog = programById(assignment.programId);
+    return programs.adherenceFor(prog, assignment, logsForAssignment(assignment.id));
   }
 
   function currentWeekIndex(assignment, program) {
@@ -92,49 +91,43 @@
   }
 
   // =====================================================================
-  // TODAY — per-player program tracker
+  // TODAY — per-player program tracker (log-on-demand SessionLogs)
   // =====================================================================
-  function sessionRow(session, program) {
-    const done = session.completed;
-    return '<div class="pgm-session" data-sid="' + esc(session.id) + '">' +
+  function assignmentLine(a) {
+    const prog = programById(a.programId);
+    if (!prog) return '';
+    const today = CT.todayISO();
+    const adh = adherence(a);
+    const loggedToday = logsForAssignment(a.id).some(function (l) { return l.date === today; });
+    const wk = currentWeekIndex(a, prog);
+    const overlay = (prog.daysPerWeek || 0) === 0;
+    return '<div class="pgm-session">' +
       '<div class="pgm-session-top">' +
-        '<div><strong>' + esc(program ? program.name : 'Program') + '</strong>' +
-          ' <span class="muted" style="font-size:var(--fs-label);">· week <span class="num">' + (session.weekIndex + 1) + '</span></span></div>' +
-        ui.pill(done ? 'Completed' : 'Planned', done ? 'green' : 'neutral') +
+        '<div><strong>' + esc(prog.name) + '</strong>' +
+          ' <span class="muted" style="font-size:var(--fs-label);">· week <span class="num">' + (wk + 1) + '</span>/<span class="num">' + prog.weeks + '</span>' +
+          (adh.pct != null ? ' · <span class="num">' + adh.done + '</span>/<span class="num">' + adh.due + '</span> due' : '') + '</span></div>' +
+        (overlay ? ui.pill('Overlay', 'neutral')
+                 : (loggedToday ? ui.pill('Logged today', 'green') : ui.pill('Not logged', 'neutral'))) +
       '</div>' +
-      '<div class="pgm-checks">' +
-        '<label class="pgm-check"><input type="checkbox" data-act="warmup" data-sid="' + esc(session.id) + '"' + (session.warmupDone ? ' checked' : '') + ' /> Warm-up</label>' +
-        '<label class="pgm-check"><input type="checkbox" data-act="armcare" data-sid="' + esc(session.id) + '"' + (session.armCareDone ? ' checked' : '') + ' /> Arm-care</label>' +
-      '</div>' +
-      '<div class="pgm-inputs">' +
-        '<label>RPE<input class="input num" type="number" inputmode="decimal" min="0" max="10" step="1" data-act="rpe" data-sid="' + esc(session.id) + '" value="' + (session.rpe == null ? '' : esc(session.rpe)) + '" /></label>' +
-        '<label>Soreness<input class="input num" type="number" inputmode="decimal" min="0" max="10" step="1" data-act="soreness" data-sid="' + esc(session.id) + '" value="' + (session.soreness == null ? '' : esc(session.soreness)) + '" /></label>' +
-      '</div>' +
-      '<div class="row" style="margin-top:var(--sp-2);">' +
-        '<button class="btn btn-sm ' + (done ? 'btn-ghost' : 'btn-primary') + '" data-act="toggle" data-sid="' + esc(session.id) + '">' +
-          '<i data-lucide="' + (done ? 'rotate-ccw' : 'check') + '"></i>' + (done ? 'Mark not done' : 'Mark done') + '</button>' +
-      '</div>' +
+      (overlay
+        ? '<p class="pgm-note" style="margin:var(--sp-2) 0 0;">Compliance overlay — tracked via Pitch Smart, nothing to log.</p>'
+        : '<div class="row" style="margin-top:var(--sp-2);">' +
+            '<button class="btn btn-sm ' + (loggedToday ? 'btn-ghost' : 'btn-primary') + '" data-act="log-session" data-aid="' + esc(a.id) + '">' +
+              '<i data-lucide="clipboard-check"></i>' + (loggedToday ? 'Log another' : 'Log session') + '</button>' +
+          '</div>') +
     '</div>';
   }
 
   function todayPlayerCard(player) {
-    const today = CT.todayISO();
     const assigns = store.byPlayer('programAssignments', player.id)
-      .filter(function (a) { return a.status !== 'completed'; });
+      .filter(function (a) { return a.status === 'active'; });
 
-    let allSessions = [];
-    let totalDue = 0, totalDone = 0, weeksLine = [];
+    let totalDue = 0, totalDone = 0;
     assigns.forEach(function (a) {
-      const prog = programById(a.programId);
-      const sess = sessionsForAssignment(a.id);
-      const adh = adherence(sess);
+      const adh = adherence(a);
       totalDue += adh.due; totalDone += adh.done;
-      if (prog) weeksLine.push(esc(prog.name) + ' (wk ' + (currentWeekIndex(a, prog) + 1) + '/' + prog.weeks + ')');
-      sess.filter(function (s) { return s.date === today; }).forEach(function (s) { allSessions.push({ s: s, prog: prog }); });
     });
-
     const adhPct = totalDue ? Math.round((totalDone / totalDue) * 100) : null;
-    const todayDone = allSessions.filter(function (x) { return x.s.completed; }).length;
     const clearance = clearanceBadge(player);
 
     let body =
@@ -142,7 +135,7 @@
         '<div class="avatar">' + esc(CT.initials(player.name)) + '</div>' +
         '<div class="meta">' +
           '<div class="name">' + esc(cleanName(player.name)) + '</div>' +
-          '<div class="sub">' + esc(player.ageBand || model.ageBandFromBirthdate(player.birthdate) || '—') + ' · ' + esc(player.level || 'youth') + '</div>' +
+          '<div class="sub">' + esc(model.bandFor(player) || '—') + ' · ' + esc(player.level || 'youth') + '</div>' +
           (clearance ? '<div class="sub" style="margin-top:var(--sp-1);">' + clearance + '</div>' : '') +
         '</div>' +
         '<div class="pgm-adherence">' +
@@ -154,13 +147,7 @@
     if (!assigns.length) {
       body += '<p class="pgm-note">No active programs. Assign one in the Programs tab.</p>';
     } else {
-      body += '<div class="pgm-weeks">' + weeksLine.join(' · ') + '</div>';
-      if (!allSessions.length) {
-        body += '<p class="pgm-note">No sessions scheduled today (rest or overlay-only).</p>';
-      } else {
-        body += '<div class="pgm-note" style="margin-bottom:var(--sp-1);">Today: <span class="num">' + todayDone + '</span>/<span class="num">' + allSessions.length + '</span> done</div>';
-        body += allSessions.map(function (x) { return sessionRow(x.s, x.prog); }).join('');
-      }
+      body += assigns.map(assignmentLine).join('');
     }
 
     body += '<div class="row" style="margin-top:var(--sp-3);">' +
@@ -185,7 +172,7 @@
       // Adherence chart across players with programs.
       html += ui.card({
         title: 'Program adherence',
-        subtitle: 'Completed vs. due sessions per player (team process, not a leaderboard)',
+        subtitle: 'Logged vs. due sessions per player (team process, not a leaderboard)',
         body: '<div class="chart-wrap"><canvas id="pgm-adherence"></canvas></div>'
       });
       html += '<div class="grid-cards" style="margin-top:var(--sp-4);">' +
@@ -203,7 +190,7 @@
         let due = 0, done = 0;
         store.byPlayer('programAssignments', p.id).forEach(function (a) {
           if (a.status === 'completed') return;
-          const adh = adherence(sessionsForAssignment(a.id));
+          const adh = adherence(a);
           due += adh.due; done += adh.done;
         });
         labels.push(cleanName(p.name));
@@ -221,40 +208,96 @@
     const goB = root.querySelector('[data-act="go-builder"]');
     if (goB) goB.addEventListener('click', function () { state.tab = 'builder'; CT.router.route(); });
 
-    root.querySelectorAll('[data-act="toggle"]').forEach(function (b) {
+    root.querySelectorAll('[data-act="log-session"]').forEach(function (b) {
       b.addEventListener('click', function () {
-        const s = store.getById('programSessions', b.getAttribute('data-sid'));
-        if (!s) return;
-        const nowDone = !s.completed;
-        store.update('programSessions', s.id, { completed: nowDone, warmupDone: nowDone || s.warmupDone, armCareDone: nowDone || s.armCareDone });
-        ui.toast(nowDone ? 'Session completed' : 'Marked not done');
-        CT.router.route();
+        const a = store.getById('programAssignments', b.getAttribute('data-aid'));
+        if (a) openLogSession(a);
       });
     });
-    function bindCheck(act, field) {
-      root.querySelectorAll('[data-act="' + act + '"]').forEach(function (cb) {
-        cb.addEventListener('change', function () {
-          const patch = {}; patch[field] = cb.checked;
-          store.update('programSessions', cb.getAttribute('data-sid'), patch);
-        });
-      });
-    }
-    bindCheck('warmup', 'warmupDone');
-    bindCheck('armcare', 'armCareDone');
-    function bindNum(act, field) {
-      root.querySelectorAll('[data-act="' + act + '"]').forEach(function (inp) {
-        inp.addEventListener('change', function () {
-          const v = inp.value.trim();
-          const patch = {}; patch[field] = v === '' ? null : Number(v);
-          store.update('programSessions', inp.getAttribute('data-sid'), patch);
-        });
-      });
-    }
-    bindNum('rpe', 'rpe');
-    bindNum('soreness', 'soreness');
-
     root.querySelectorAll('[data-act="quick-checkin"]').forEach(function (b) {
       b.addEventListener('click', function () { openCheckIn(store.getPlayer(b.getAttribute('data-pid'))); });
+    });
+  }
+
+  // ----- log-a-session modal (checklist + RPE + notes + throws gate) ----------
+  function openLogSession(assignment) {
+    const player = store.getPlayer(assignment.playerId);
+    const prog = programById(assignment.programId);
+    if (!player || !prog) return;
+    const wk = currentWeekIndex(assignment, prog);
+    const day = (prog.days && prog.days[0]) || { items: [] };
+    const throwing = prog.type === 'throwing';
+    const v = throwing ? pitchsmart.evaluate(player, store.byPlayer('workloadLogs', player.id)) : null;
+
+    const items = (day.items || []).map(function (it) {
+      const label = it.kind === 'drill'
+        ? (function () { const d = store.getDrill(it.drillId); return (d ? d.name : 'Drill') + (it.sets ? ' · ' + it.sets + 'x' + (it.reps || '?') : ''); })()
+        : it.text;
+      return '<label class="pgm-check"><input type="checkbox" data-item="' + esc(it.id) + '" checked /> ' + esc(label) + '</label>';
+    }).join('');
+
+    const throwsBlock = throwing
+      ? '<div class="field-row">' +
+          ui.formField({ type: 'number', name: 'throws', label: 'Throws (count)', min: 0, step: 1,
+            help: v.cleared ? ('Pitch Smart: ' + v.remainingToday + ' left today (' + v.ageBand + ')') : 'Pitch Smart: NOT cleared today.' }) +
+          ui.formField({ type: 'number', name: 'rpe', label: 'RPE (1-10)', min: 1, max: 10, step: 1 }) +
+        '</div>' +
+        (!v.cleared ? referralBlock('Not cleared to throw today — ' + (v.reasons[0] || 'Pitch Smart limit') + '. Logged throws will be blocked.') : '')
+      : ui.formField({ type: 'number', name: 'rpe', label: 'RPE (1-10)', min: 1, max: 10, step: 1 });
+
+    const html =
+      '<p class="muted" style="margin-top:0;">' + esc(prog.name) + ' · week ' + (wk + 1) + ' · ' + esc(cleanName(player.name)) + '</p>' +
+      (items ? '<div class="field"><label>Completed items</label><div class="pgm-checks" style="flex-direction:column;align-items:flex-start;">' + items + '</div></div>' : '') +
+      throwsBlock +
+      ui.formField({ type: 'textarea', name: 'notes', label: 'Notes', placeholder: 'How it went, modifications…' }) +
+      '<div class="modal-actions">' +
+        '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
+        '<button class="btn btn-primary" data-act="save"><i data-lucide="check"></i>Log session</button>' +
+      '</div>';
+
+    ui.openModal('Log program session', html, function (modal, close) {
+      modal.querySelector('[data-act="cancel"]').addEventListener('click', close);
+      modal.querySelector('[data-act="save"]').addEventListener('click', function () {
+        const get = function (n) { const el = modal.querySelector('[name="' + n + '"]'); return el ? el.value.trim() : ''; };
+        const throwsN = get('throws') === '' ? null : Math.max(0, Math.round(Number(get('throws'))));
+
+        // HARD BLOCK: red Pitch Smart status stops logged throwing volume.
+        if (throwing && throwsN > 0) {
+          const now = pitchsmart.evaluate(player, store.byPlayer('workloadLogs', player.id));
+          if (!now.cleared) { ui.toast('Blocked: ' + (now.reasons[0] || 'not cleared to throw today.')); return; }
+          if (throwsN > now.remainingToday) {
+            ui.toast('Blocked: only ' + now.remainingToday + ' throws left today for ' + now.ageBand + '.');
+            return;
+          }
+        }
+
+        const itemChecks = {};
+        modal.querySelectorAll('[data-item]').forEach(function (cb) { itemChecks[cb.getAttribute('data-item')] = cb.checked; });
+        const rpe = get('rpe') === '' ? null : Number(get('rpe'));
+
+        const log = store.insert('sessionLogs', {
+          playerId: player.id,
+          date: CT.todayISO(),
+          assignmentId: assignment.id,
+          programDayRef: { weekIndex: wk, dayIndex: 0 },
+          itemChecks: itemChecks,
+          notes: get('notes'),
+          rpe: rpe,
+          throws: throwsN
+        });
+        // Throws feed Pitch Smart via an idempotent sourceRef-tagged workload log.
+        if (throwsN > 0) {
+          store.append('workloadLogs', {
+            playerId: player.id, date: CT.todayISO(), type: 'practice',
+            pitches: throwsN, outs: 0, rpe: rpe,
+            sourceRef: { kind: 'session', id: log.id },
+            notes: prog.name + ' session'
+          });
+        }
+        close();
+        ui.toast('Session logged');
+        CT.router.route();
+      });
     });
   }
 
@@ -271,7 +314,7 @@
       const age = model.ageFromBirthdate(p.birthdate);
       return '<label class="pgm-pick' + (elig.eligible ? '' : ' pgm-pick-blocked') + '">' +
         '<input type="checkbox" data-pick="' + esc(p.id) + '"' + (checked ? ' checked' : '') + (elig.eligible ? '' : ' disabled') + ' /> ' +
-        '<span class="pgm-pick-name">' + esc(cleanName(p.name)) + ' <span class="muted">(' + (age != null ? age + 'y · ' : '') + esc(p.ageBand || '—') + ')</span></span>' +
+        '<span class="pgm-pick-name">' + esc(cleanName(p.name)) + ' <span class="muted">(' + (age != null ? age + 'y · ' : '') + esc(model.bandFor(p) || '—') + ')</span></span>' +
         '<span class="pgm-pick-status">' + ui.pill(elig.eligible ? 'OK' : 'Blocked', tone) + '</span>' +
         '<span class="pgm-pick-reason muted">' + esc(elig.reason) + '</span>' +
       '</label>';
@@ -326,17 +369,17 @@
         const tpl = programs.byTemplateId(sel.value);
         const startDate = modal.querySelector('[name="startDate"]').value || CT.todayISO();
 
-        // Instantiate ONE concrete program from the template, then assign to each
-        // selected (already-eligible) player with auto-generated dated sessions.
-        const program = store.insert('programs', Object.assign({}, tpl, { isTemplate: false }));
+        // Instantiate ONE concrete v3 program from the template (checklist -> step
+        // items), then assign to each selected (already-eligible) player. Sessions
+        // are NOT pre-generated — they're logged on demand from the Today tab.
+        const program = store.insert('programs', programs.toProgram(tpl));
         let assigned = 0;
         ids.forEach(function (pid) {
           const player = store.getPlayer(pid);
           if (!player) return;
           const elig = programs.eligibility(tpl, player);
           if (!elig.eligible) return; // hard guard (disabled boxes can't be checked, but be safe)
-          const assignment = store.insert('programAssignments', { playerId: pid, programId: program.id, startDate: startDate, status: 'active' });
-          programs.generateSessions(program, assignment).forEach(function (s) { store.insert('programSessions', s); });
+          store.insert('programAssignments', { playerId: pid, programId: program.id, startDate: startDate, status: 'active' });
           assigned++;
         });
         close();
@@ -351,24 +394,23 @@
     const player = store.getPlayer(assignment.playerId);
     const program = programById(assignment.programId);
     if (!player || !program) return '';
-    const sessions = sessionsForAssignment(assignment.id);
-    const adh = adherence(sessions);
+    const logs = logsForAssignment(assignment.id);
+    const adh = adherence(assignment);
     const wk = currentWeekIndex(assignment, program);
-    const completedTotal = sessions.filter(function (s) { return s.completed; }).length;
 
     let body =
       '<div style="display:flex;justify-content:space-between;gap:var(--sp-2);align-items:flex-start;">' +
         '<div><div style="color:var(--text-hi);font-weight:var(--fw-semibold);">' + esc(program.name) + '</div>' +
-          '<div class="muted" style="font-size:var(--fs-data);">' + esc(cleanName(player.name)) + ' · ' + esc(program.category) + '</div></div>' +
+          '<div class="muted" style="font-size:var(--fs-data);">' + esc(cleanName(player.name)) + ' · ' + esc(program.type) + '</div></div>' +
         ui.pill(assignment.status, assignment.status === 'active' ? 'accent' : 'neutral') +
       '</div>' +
       '<div class="kpi-grid" style="margin-top:var(--sp-3);grid-template-columns:repeat(3,1fr);">' +
         '<div class="kpi"><div class="k">Week</div><div class="v num">' + (wk + 1) + '/' + program.weeks + '</div></div>' +
-        '<div class="kpi"><div class="k">Sessions done</div><div class="v num">' + completedTotal + '/' + sessions.length + '</div></div>' +
+        '<div class="kpi"><div class="k">Sessions logged</div><div class="v num">' + logs.length + (adh.due ? '/' + adh.due : '') + '</div></div>' +
         '<div class="kpi"><div class="k">Adherence</div><div class="v num">' + (adh.pct == null ? '—' : adh.pct + '%') + '</div></div>' +
       '</div>' +
       (program.clinicianRequired ? referralBlock('Clinician-supervised program — confirm clearance before progressing.') : '') +
-      (program.sessionsPerWeek === 0 ? '<div class="pgm-note">Compliance overlay — no scheduled sessions; tracked via Pitch Smart.</div>' : '') +
+      (program.daysPerWeek === 0 ? '<div class="pgm-note">Compliance overlay — no scheduled sessions; tracked via Pitch Smart.</div>' : '') +
       '<div class="row" style="margin-top:var(--sp-3);">' +
         (assignment.status === 'active'
           ? '<button class="btn btn-sm" data-act="pause" data-id="' + esc(assignment.id) + '"><i data-lucide="pause"></i>Pause</button>'
@@ -385,7 +427,7 @@
       ui.card({
         title: 'Assign a training program',
         subtitle: 'Templates are age-gated — weighted-ball / HS+ work is blocked for youth.',
-        body: '<p class="muted" style="font-size:var(--fs-sm);">Pick a template, set a start date, and assign to one or many players. Dated weekly sessions are generated automatically.</p>' +
+        body: '<p class="muted" style="font-size:var(--fs-sm);">Pick a template, set a start date, and assign to one or many players. Sessions are logged on demand from the Today tab (nothing goes stale).</p>' +
           '<button class="btn btn-primary" data-act="assign-new"><i data-lucide="plus"></i>Assign program</button>'
       });
 
@@ -410,8 +452,7 @@
       b.addEventListener('click', function () {
         const a = store.getById('programAssignments', b.getAttribute('data-id'));
         if (!a) return;
-        ui.confirmDialog('Remove assignment', 'Remove this program and its scheduled sessions? This cannot be undone.', 'Remove', function () {
-          sessionsForAssignment(a.id).forEach(function (s) { store.remove('programSessions', s.id); });
+        ui.confirmDialog('Remove assignment', 'Remove this program assignment? Already-logged sessions stay in the player\'s history.', 'Remove', function () {
           store.remove('programAssignments', a.id);
           ui.toast('Assignment removed');
           CT.router.route();
@@ -473,9 +514,10 @@
           sleepHours: sleep === '' ? null : Number(sleep),
           mood: mood === '' ? null : Number(mood),
           soreness: sore === '' ? null : Number(sore),
+          painLevel: painLevel,           // v3: raw 0-10 pain is a real schema field
           armPain: flagged,
           painLocation: flagged ? get('painLocation') : '',
-          notes: painLevel != null ? ('Arm pain reported: ' + painLevel + '/10.') : ''
+          notes: ''
         });
         close();
         if (flagged) ui.toast('Pain alert created — refer to clinician');
@@ -494,7 +536,9 @@
       '<td class="num">' + (c.sleepHours == null ? '—' : esc(c.sleepHours) + 'h') + '</td>' +
       '<td class="num">' + (c.mood == null ? '—' : esc(c.mood) + '/5') + '</td>' +
       '<td class="num">' + (c.soreness == null ? '—' : esc(c.soreness) + '/10') + '</td>' +
-      '<td>' + (flagged ? ui.pill(c.painLocation ? 'Pain · ' + c.painLocation : 'Pain', 'red') : '<span class="muted">—</span>') + '</td>' +
+      '<td>' + (flagged
+        ? ui.pill('Pain' + (c.painLevel != null ? ' ' + c.painLevel + '/10' : '') + (c.painLocation ? ' · ' + c.painLocation : ''), 'red')
+        : '<span class="muted">—</span>') + '</td>' +
     '</tr>';
   }
 
@@ -546,7 +590,7 @@
     // Team-wide adherence across all active assignments (the "is everything OK?" number).
     let teamDue = 0, teamDone = 0;
     activeAssignments().forEach(function (a) {
-      const adh = adherence(sessionsForAssignment(a.id));
+      const adh = adherence(a);
       teamDue += adh.due; teamDone += adh.done;
     });
     const teamAdh = teamDue ? Math.round((teamDone / teamDue) * 100) : null;

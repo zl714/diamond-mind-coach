@@ -37,7 +37,7 @@
     'outfieldVelo', 'sixtyYard', 'proAgility', 'popTime'];
 
   // ---------- small helpers ----------
-  function playerBand(p) { return p.ageBand || model.ageBandFromBirthdate(p.birthdate) || null; }
+  function playerBand(p) { return model.bandFor(p); }
 
   function latestAnthro(playerId) {
     const rows = store.byPlayer('anthroReadings', playerId);
@@ -45,7 +45,7 @@
     return rows.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).slice(-1)[0];
   }
 
-  function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
+  function isPitcher(p) { return model.isPitcher(p); }
 
   // Non-voided readings for one metric, oldest -> newest.
   function metricReadings(playerId, metricKey) {
@@ -147,7 +147,7 @@
   }
 
   function devChip(player) {
-    const sum = round1(store.lessonsForPlayer(player.id).reduce(function (s, l) {
+    const sum = round1(store.sessionLogsForPlayer(player.id).reduce(function (s, l) {
       return s + (l.ratingDelta || 0);
     }, 0));
     const dp = deltaParts(sum, false, false);
@@ -442,16 +442,16 @@
       });
     });
 
-    // Lessons (drills + notes + rating delta).
-    store.lessonsForPlayer(player.id).forEach(function (l) {
-      const names = (l.drillIds || []).map(function (id) { const d = store.getDrill(id); return d ? d.name : null; }).filter(Boolean);
+    // Coaching / program sessions (drills + notes + rating delta).
+    store.sessionLogsForPlayer(player.id).forEach(function (l) {
+      const names = (l.extraDrillIds || []).map(function (id) { const d = store.getDrill(id); return d ? d.name : null; }).filter(Boolean);
       const deltas = [];
       if (l.ratingDelta != null && l.ratingDelta !== 0) {
         deltas.push({ label: 'Rating', net: l.ratingDelta, unit: '', lowerBetter: false, raw: false });
       }
       events.push({
         date: l.date, sort: l.date + '_1', dot: 'var(--accent-500)',
-        title: 'Lesson — ' + (names.length ? names.length + ' drill' + (names.length === 1 ? '' : 's') + ' done' : 'coaching session'),
+        title: 'Session — ' + (names.length ? names.length + ' drill' + (names.length === 1 ? '' : 's') + ' done' : 'coaching session'),
         outcome: l.notes || (names.length ? names.join(', ') : 'Coaching session'),
         meta: names.length ? names.join(' · ') : '',
         deltas: deltas
@@ -522,8 +522,8 @@
 
   function feedEmptyHtml() {
     return ui.emptyState('activity', 'No activity yet',
-      'Log a lesson, assessment, or game for this player to build the timeline.',
-      '<a class="btn btn-primary" href="#/assessment"><i data-lucide="plus"></i>Log a session</a>');
+      'Log a session, assessment, or game for this player to build the timeline.',
+      '<a class="btn btn-primary" href="#/assess/new"><i data-lucide="plus"></i>New assessment</a>');
   }
 
   function feedErrorHtml() {
@@ -576,7 +576,8 @@
         }).join('') +
       '</select>' +
       '<button class="btn btn-ghost" id="prof-edit"><i data-lucide="pencil"></i>Edit</button>' +
-      '<a class="btn btn-primary" href="#/assessment/' + esc(player.id) + '"><i data-lucide="clipboard-plus"></i>Log assessment</a>';
+      '<a class="btn" href="#/assess/' + esc(player.id) + '"><i data-lucide="history"></i>Assessments</a>' +
+      '<a class="btn btn-primary" href="#/assess/new/' + esc(player.id) + '"><i data-lucide="clipboard-plus"></i>New assessment</a>';
 
     // Default metric tab: first with data, else Hitting.
     let activeTab = 'hitting';

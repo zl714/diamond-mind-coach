@@ -21,16 +21,11 @@
     if (!rows.length) return null;
     return rows.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).slice(-1)[0];
   }
-  function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
+  function isPitcher(p) { return model.isPitcher(p); }
 
-  // Short position labels keep the meta line calm (Shortstop -> SS, etc.).
-  const POS_ABBR = {
-    'Pitcher': 'P', 'Catcher': 'C', 'First Base': '1B', 'Second Base': '2B',
-    'Third Base': '3B', 'Shortstop': 'SS', 'Left Field': 'LF', 'Center Field': 'CF',
-    'Right Field': 'RF', 'Utility': 'UTIL', 'Designated Hitter': 'DH'
-  };
+  // v3: positions are already the short enum codes ('P', 'SS', 'CF', ...).
   function positionsShort(p) {
-    const list = (p.positions || []).map(function (x) { return POS_ABBR[x] || x; });
+    const list = p.positions || [];
     return list.length ? list.slice(0, 3).join('/') : '—';
   }
 
@@ -72,7 +67,7 @@
 
   function playerCard(p) {
     const age = model.ageFromBirthdate(p.birthdate);
-    const band = p.ageBand || model.ageBandFromBirthdate(p.birthdate) || '—';
+    const band = model.bandFor(p) || '—';
     const anthro = latestAnthro(p.id);
     const ht = anthro ? heightStr(anthro.heightIn) : null;
     const wt = anthro && anthro.weightLb != null ? anthro.weightLb + ' lb' : null;
@@ -110,7 +105,19 @@
         ui.formField({ type: 'select', name: 'bats', label: 'Bats', value: p.bats || 'R', options: ['R', 'L', 'S'] }) +
         ui.formField({ type: 'select', name: 'throws', label: 'Throws', value: p.throws || 'R', options: ['R', 'L'] }) +
       '</div>' +
-      ui.formField({ type: 'text', name: 'positions', label: 'Positions', value: (p.positions || []).join(', '), placeholder: 'e.g. Shortstop, Pitcher', help: 'Comma-separated.' }) +
+      '<div class="field"><label>Positions</label>' +
+        '<div class="pos-grid">' +
+          model.POSITIONS.map(function (code) {
+            const on = (p.positions || []).indexOf(code) >= 0;
+            return '<label class="pos-chip' + (on ? ' checked' : '') + '">' +
+              '<input type="checkbox" data-pos="' + code + '"' + (on ? ' checked' : '') + ' />' +
+              '<span class="pos-code">' + code + '</span>' +
+              '<span class="pos-name">' + esc(model.POSITION_LABELS[code] || code) + '</span>' +
+            '</label>';
+          }).join('') +
+        '</div>' +
+        '<div class="help">Pitcher (P) drives Pitch Smart tracking; Catcher (C) unlocks pop-time.</div>' +
+      '</div>' +
       ui.formField({ type: 'text', name: 'jersey', label: 'Jersey #', value: p.jersey, placeholder: 'Optional' }) +
       '<div class="field-row">' +
         ui.formField({ type: 'number', name: 'heightIn', label: 'Height (in)', value: anthro && anthro.heightIn != null ? anthro.heightIn : '', min: 40, max: 84, step: 0.5, help: 'Adds a dated reading.' }) +
@@ -124,23 +131,30 @@
 
     ui.openModal(existing ? 'Edit player' : 'Add player', html, function (modal, close) {
       modal.querySelector('[data-act="cancel"]').addEventListener('click', close);
+      // Position chips: reflect the checked state visually.
+      modal.querySelectorAll('[data-pos]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          const chip = cb.closest('.pos-chip');
+          if (chip) chip.classList.toggle('checked', cb.checked);
+        });
+      });
       modal.querySelector('[data-act="save"]').addEventListener('click', function () {
         const get = function (n) { const el = modal.querySelector('[name="' + n + '"]'); return el ? el.value.trim() : ''; };
+        const positions = Array.prototype.slice.call(modal.querySelectorAll('[data-pos]:checked'))
+          .map(function (cb) { return cb.getAttribute('data-pos'); });
         const data = {
           name: get('name'),
           birthdate: get('birthdate'),
           level: get('level'),
           bats: get('bats'),
           throws: get('throws'),
-          positions: get('positions').split(',').map(function (s) { return s.trim(); }).filter(Boolean),
+          positions: positions,
           jersey: get('jersey'),
           notes: get('notes')
         };
         const v = model.validatePlayer(data);
         if (!v.ok) { ui.toast(v.errors[0]); return; }
         v.warnings.forEach(function (w) { ui.toast(w); });
-
-        data.ageBand = model.ageBandFromBirthdate(data.birthdate) || '';
 
         let saved;
         if (existing) saved = store.update('players', p.id, data);
@@ -207,7 +221,7 @@
     const add = root.querySelector('#add-player');
     if (add) add.addEventListener('click', function () { openForm(null); });
     const na = root.querySelector('#new-assess');
-    if (na) na.addEventListener('click', function () { CT.router.navigate('#/assessment'); });
+    if (na) na.addEventListener('click', function () { CT.router.navigate('#/assess/new'); });
   }
 
   window.CT.playersUI = { openForm: openForm, confirmDelete: confirmDelete };

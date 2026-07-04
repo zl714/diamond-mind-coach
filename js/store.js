@@ -1,42 +1,42 @@
-/* store.js — versioned, immutable localStorage data layer for ALL entities.
-   State shape is a set of flat top-level collections keyed by foreign IDs:
+/* store.js — versioned, immutable localStorage data layer for ALL entities (v3).
+   State shape is a set of flat top-level collections keyed by foreign IDs plus a
+   `settings` singleton:
    {
-     schemaVersion, isSample, updatedAt,
+     schemaVersion, updatedAt, settings,
      teams, seasons, players, anthroReadings, assessmentSessions, metricReadings,
      games, battingStatLines, pitchingAppearances, fieldingStatLines,
-     workloadLogs, dailyCheckIns, programs, programAssignments, programSessions,
-     benchmarks
+     workloadLogs, dailyCheckIns, drills, programs, programAssignments, sessionLogs
    }
    Mutations replace state with NEW objects (never mutate). Append-only collections
    (metricReadings, workloadLogs) only ever grow — corrections add a new row.
-   Exposed on window.CT.store. */
+   v3 boots EMPTY; a legacy 'coachTracker.v2' blob is migrated once via CT.migrate
+   (the v2 blob is left in localStorage as a rollback). Exposed on window.CT.store. */
 (function () {
   'use strict';
 
   const CT = window.CT;
-  const KEY = 'coachTracker.v2';
-  const SCHEMA_VERSION = 2;
+  const KEY = 'diamondMind.v3';
+  const SCHEMA_VERSION = 3;
 
-  // collection name -> model factory used to normalize each record on load/insert.
+  // collection name -> { factory, playerFk } . playerFk drives the cascade
+  // delete declaratively (no hard-coded child list to forget updating).
   const COLLECTIONS = {
-    teams: 'Team',
-    seasons: 'Season',
-    players: 'Player',
-    anthroReadings: 'AnthroReading',
-    assessmentSessions: 'AssessmentSession',
-    metricReadings: 'MetricReading',
-    games: 'Game',
-    battingStatLines: 'BattingStatLine',
-    pitchingAppearances: 'PitchingAppearance',
-    fieldingStatLines: 'FieldingStatLine',
-    workloadLogs: 'WorkloadLog',
-    dailyCheckIns: 'DailyCheckIn',
-    programs: 'Program',
-    programAssignments: 'ProgramAssignment',
-    programSessions: 'ProgramSession',
-    drills: 'Drill',
-    lessons: 'Lesson',
-    benchmarks: 'Benchmark'
+    teams: { factory: 'Team' },
+    seasons: { factory: 'Season' },
+    players: { factory: 'Player' },
+    anthroReadings: { factory: 'AnthroReading', playerFk: 'playerId' },
+    assessmentSessions: { factory: 'AssessmentSession', playerFk: 'playerId' },
+    metricReadings: { factory: 'MetricReading', playerFk: 'playerId' },
+    games: { factory: 'Game' },
+    battingStatLines: { factory: 'BattingStatLine', playerFk: 'playerId' },
+    pitchingAppearances: { factory: 'PitchingAppearance', playerFk: 'playerId' },
+    fieldingStatLines: { factory: 'FieldingStatLine', playerFk: 'playerId' },
+    workloadLogs: { factory: 'WorkloadLog', playerFk: 'playerId' },
+    dailyCheckIns: { factory: 'DailyCheckIn', playerFk: 'playerId' },
+    drills: { factory: 'Drill' },
+    programs: { factory: 'Program' },
+    programAssignments: { factory: 'ProgramAssignment', playerFk: 'playerId' },
+    sessionLogs: { factory: 'SessionLog', playerFk: 'playerId' }
   };
   const COLLECTION_NAMES = Object.keys(COLLECTIONS);
   // Append-only collections: never edited in place; corrections add a new row.
@@ -46,10 +46,28 @@
   const listeners = [];
 
   function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
-  function factory(name) { return CT.model[COLLECTIONS[name]]; }
+  function factory(name) { return CT.model[COLLECTIONS[name].factory]; }
+
+  // Coach/app preferences singleton (NOT a collection).
+  function normalizeSettings(d) {
+    d = (d && typeof d === 'object') ? d : {};
+    const preset = Array.isArray(d.assessPreset) ? d.assessPreset.map(String) : null;
+    return {
+      orgName: d.orgName == null ? '' : String(d.orgName),
+      coachName: d.coachName == null ? '' : String(d.coachName),
+      onboarding: { dismissed: !!(d.onboarding && d.onboarding.dismissed) },
+      // Last module selection — pre-checks the next assessment's module picker.
+      assessPreset: preset && preset.length ? preset : ['hitting', 'throwing', 'speed'],
+      speedDefault: (d.speedDefault === 'thirtyYard' || d.speedDefault === 'sixtyYard') ? d.speedDefault : null
+    };
+  }
 
   function emptyState() {
-    const s = { schemaVersion: SCHEMA_VERSION, isSample: false, updatedAt: new Date().toISOString() };
+    const s = {
+      schemaVersion: SCHEMA_VERSION,
+      updatedAt: new Date().toISOString(),
+      settings: normalizeSettings(null)
+    };
     COLLECTION_NAMES.forEach(function (n) { s[n] = []; });
     return s;
   }
@@ -57,8 +75,8 @@
   // Normalize every record through its model factory (fail-safe defaults).
   function normalize(data) {
     const s = emptyState();
-    s.isSample = !!data.isSample;
     s.updatedAt = data.updatedAt || new Date().toISOString();
+    s.settings = normalizeSettings(data.settings);
     COLLECTION_NAMES.forEach(function (name) {
       const fac = factory(name);
       const arr = Array.isArray(data[name]) ? data[name] : [];
@@ -70,7 +88,7 @@
 
   function isValidState(data) {
     if (!data || typeof data !== 'object') return false;
-    // v2 must carry a players array; everything else is optional/normalizable.
+    // must carry a players array; everything else is optional/normalizable.
     return Array.isArray(data.players);
   }
 
@@ -79,51 +97,66 @@
       state = Object.assign({}, state, { updatedAt: new Date().toISOString() });
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (err) {
-      console.warn('Coach Tracker: could not persist —', err && err.message);
+      console.warn('Diamond Mind: could not persist —', err && err.message);
+      // Surface silently-failing writes to the coach (quota, private mode, ...).
+      try { if (CT.ui && CT.ui.toast) CT.ui.toast('Warning: data could not be saved (storage full?)'); } catch (e) {}
     }
   }
 
   function emit() { listeners.forEach(function (fn) { try { fn(state); } catch (e) {} }); }
   function subscribe(fn) { listeners.push(fn); return function () { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1); }; }
 
-  // Seed the reference benchmarks into state if absent (so the benchmarks
-  // collection is queryable like any other entity).
-  function withSeededBenchmarks(s) {
-    if (s.benchmarks && s.benchmarks.length) return s;
-    const rows = (CT.benchmarks && CT.benchmarks.table) ? CT.benchmarks.table() : [];
-    return Object.assign({}, s, { benchmarks: rows.map(function (r) { return CT.model.Benchmark(r); }) });
-  }
-
   function load() {
+    // 1) v3 blob present -> load it.
     let raw = null;
     try { raw = localStorage.getItem(KEY); } catch (e) { raw = null; }
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         if (isValidState(parsed)) {
-          state = withSeededBenchmarks(normalize(parsed));
+          state = normalize(parsed);
           return state;
         }
       } catch (e) {
-        console.warn('Coach Tracker: stored data invalid — reseeding demo.');
+        console.warn('Diamond Mind: stored v3 data invalid — booting empty.');
       }
     }
-    // No valid stored data — boot EMPTY (views render designed empty states +
-    // first-run onboarding; there is no demo seed anymore).
-    state = withSeededBenchmarks(emptyState());
+    // 2) No v3 — migrate a real (non-demo) coachTracker.v2 blob once.
+    if (CT.migrate) {
+      const v2 = CT.migrate.readV2();
+      if (v2 && !v2.isSample) {
+        try {
+          state = normalize(CT.migrate.fromV2(v2));
+          persist(); // v2 blob is left untouched as a rollback
+          console.info('Diamond Mind: migrated coachTracker.v2 -> diamondMind.v3 (' +
+            (state.players || []).length + ' players).');
+          return state;
+        } catch (e) {
+          console.warn('Diamond Mind: v2 migration failed — booting empty.', e);
+        }
+      }
+    }
+    // 3) Empty boot (designed empty states + first-run onboarding).
+    state = emptyState();
     persist();
     return state;
   }
 
   function getState() { if (!state) load(); return state; }
 
-  // Any user write clears the sample flag (demo badge disappears).
-  function commit(nextCollections, opts) {
-    const keepSample = opts && opts.keepSample;
-    state = Object.assign({}, state, nextCollections, { isSample: keepSample ? state.isSample : false });
+  function commit(nextCollections) {
+    state = Object.assign({}, state, nextCollections);
     persist();
     emit();
     return state;
+  }
+
+  // ---- settings singleton ----
+  function getSettings() { return Object.assign({}, getState().settings); }
+  function updateSettings(patch) {
+    const next = normalizeSettings(Object.assign({}, getState().settings, patch || {}));
+    commit({ settings: next });
+    return next;
   }
 
   // ---- generic queries ----
@@ -135,19 +168,18 @@
 
   // ---- generic mutations (immutable) ----
   // insert: normalize through factory, append a NEW record, return it.
-  function insert(name, data, opts) {
-    const fac = factory(name);
-    if (!fac) throw new Error('Unknown collection: ' + name);
-    const rec = fac(data);
+  function insert(name, data) {
+    if (!COLLECTIONS[name]) throw new Error('Unknown collection: ' + name);
+    const rec = factory(name)(data);
     const next = {}; next[name] = (getState()[name] || []).concat([rec]);
-    commit(next, opts);
+    commit(next);
     return rec;
   }
   // append: identical to insert, used to make append-only intent explicit.
-  function append(name, data, opts) { return insert(name, data, opts); }
+  function append(name, data) { return insert(name, data); }
 
   // update: patch a record by id (BLOCKED for append-only collections).
-  function update(name, id, patch, opts) {
+  function update(name, id, patch) {
     if (APPEND_ONLY[name]) throw new Error(name + ' is append-only; add a correcting row instead.');
     const fac = factory(name);
     let updated = null;
@@ -157,25 +189,25 @@
       return updated;
     });
     const next = {}; next[name] = arr;
-    commit(next, opts);
+    commit(next);
     return updated;
   }
 
   // remove: delete by id. For append-only collections this physically removes the
   // row (used only for hard deletes / undo); prefer voiding via a correction row.
-  function remove(name, id, opts) {
+  function remove(name, id) {
     const next = {}; next[name] = (getState()[name] || []).filter(function (r) { return r.id !== id; });
-    commit(next, opts);
+    commit(next);
   }
 
-  // Cascade-delete a player and everything that references them.
+  // Cascade-delete a player and everything that references them (driven by the
+  // declarative playerFk field on the collection registry).
   function deletePlayerCascade(playerId) {
-    const childCollections = ['anthroReadings', 'assessmentSessions', 'metricReadings',
-      'battingStatLines', 'pitchingAppearances', 'fieldingStatLines', 'workloadLogs',
-      'dailyCheckIns', 'programAssignments', 'programSessions', 'lessons'];
     const next = { players: (getState().players || []).filter(function (p) { return p.id !== playerId; }) };
-    childCollections.forEach(function (c) {
-      next[c] = (getState()[c] || []).filter(function (r) { return r.playerId !== playerId; });
+    COLLECTION_NAMES.forEach(function (name) {
+      const fk = COLLECTIONS[name].playerFk;
+      if (!fk) return;
+      next[name] = (getState()[name] || []).filter(function (r) { return r[fk] !== playerId; });
     });
     commit(next);
   }
@@ -195,10 +227,7 @@
     return rows[rows.length - 1];
   }
 
-  // ---- Drill library + Lessons (coaching-session workflow) ----
-  // The DrillLibrary is just the `drills` collection. Both drills and lessons use
-  // the generic insert/append/update/remove CRUD; these are convenience reads +
-  // append-only-friendly writers for the drag-drop board and the notes editor.
+  // ---- Drill library + SessionLogs (coaching-session workflow) ----
   function drillLibrary() {
     return all('drills').sort(function (a, b) {
       if (a.category !== b.category) return a.category < b.category ? -1 : 1;
@@ -207,20 +236,19 @@
   }
   function getDrill(id) { return getById('drills', id); }
   function drillsByCategory(cat) { return where('drills', 'category', cat); }
-  function getLesson(id) { return getById('lessons', id); }
+  function getSessionLog(id) { return getById('sessionLogs', id); }
   // Newest-first, the order session timelines expect.
-  function lessonsForPlayer(playerId) {
-    return byPlayer('lessons', playerId).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  function sessionLogsForPlayer(playerId) {
+    return byPlayer('sessionLogs', playerId).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
   }
-  // Persist the (re)ordered drill list for a lesson — call from SortableJS onEnd
+  // Persist the (re)ordered drill list for a session — call from SortableJS onEnd
   // with col.toArray() (an array of data-id strings).
-  function setLessonDrills(lessonId, drillIds) {
-    return update('lessons', lessonId, { drillIds: Array.isArray(drillIds) ? drillIds.map(String) : [] });
+  function setSessionDrills(sessionLogId, drillIds) {
+    return update('sessionLogs', sessionLogId, { extraDrillIds: Array.isArray(drillIds) ? drillIds.map(String) : [] });
   }
-  // Notes are keyed on the STABLE lesson id (never board position) so they follow
-  // the lesson regardless of how its drills are dragged/reordered.
-  function setLessonNotes(lessonId, body) {
-    return update('lessons', lessonId, { notes: body == null ? '' : String(body) });
+  // Notes are keyed on the STABLE sessionLog id (never board position).
+  function setSessionNotes(sessionLogId, body) {
+    return update('sessionLogs', sessionLogId, { notes: body == null ? '' : String(body) });
   }
 
   function lastAssessmentDate(playerId) {
@@ -232,21 +260,28 @@
   // ---- bulk: export / import / reset ----
   function exportAll() {
     const s = getState();
-    const payload = { app: 'coach-tracker', schemaVersion: SCHEMA_VERSION, exportedAt: new Date().toISOString() };
+    const payload = {
+      app: 'diamond-mind',
+      schemaVersion: SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      settings: s.settings
+    };
     COLLECTION_NAMES.forEach(function (n) { payload[n] = s[n]; });
     return payload;
   }
 
-  function importAll(data, opts) {
+  // Accepts v3 payloads directly; v2 payloads must be run through
+  // CT.migrate.fromV2 first (io.js does this).
+  function importAll(data) {
     if (!isValidState(data)) throw new Error('Import is missing a "players" array.');
-    state = withSeededBenchmarks(normalize(Object.assign({}, data, { isSample: !!(opts && opts.isSample) })));
+    state = normalize(data);
     persist();
     emit();
     return state;
   }
 
   function clearAll() {
-    state = withSeededBenchmarks(emptyState());
+    state = emptyState();
     persist();
     emit();
     return state;
@@ -260,6 +295,9 @@
     load: load,
     getState: getState,
     subscribe: subscribe,
+    // settings
+    getSettings: getSettings,
+    updateSettings: updateSettings,
     // queries
     all: all,
     getById: getById,
@@ -270,14 +308,14 @@
     getPlayer: function (id) { return getById('players', id); },
     latestMetric: latestMetric,
     lastAssessmentDate: lastAssessmentDate,
-    // drill library + lessons (coaching-session workflow)
+    // drill library + session logs (coaching-session workflow)
     drillLibrary: drillLibrary,
     getDrill: getDrill,
     drillsByCategory: drillsByCategory,
-    getLesson: getLesson,
-    lessonsForPlayer: lessonsForPlayer,
-    setLessonDrills: setLessonDrills,
-    setLessonNotes: setLessonNotes,
+    getSessionLog: getSessionLog,
+    sessionLogsForPlayer: sessionLogsForPlayer,
+    setSessionDrills: setSessionDrills,
+    setSessionNotes: setSessionNotes,
     // mutations
     insert: insert,
     append: append,

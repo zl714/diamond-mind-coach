@@ -13,10 +13,9 @@
   const CT = window.CT;
   const ui = CT.ui, store = CT.store, model = CT.model, esc = CT.escapeHtml;
 
-  // Curated quick-stat metrics (keys must be model.METRIC_BY_KEY keys).
-  const QUICK_KEYS = ['exitVeloMax', 'batSpeed', 'fastballVelo', 'strikePct', 'sixtyYard'];
-
   // Persisted selection + last screen-reader announcement (survive re-render).
+  // (v3: sessions are SessionLogs — the old lesson.quickStats side-channel is
+  // gone; measurements belong in Assessments where they reach charts/percentiles.)
   const sel = { playerId: null, lessonId: null };
   let announceMsg = '';
 
@@ -35,7 +34,7 @@
   function ensureSelection(players, ctxParam) {
     if (ctxParam && store.getPlayer(ctxParam)) sel.playerId = ctxParam;
     if (!sel.playerId || !store.getPlayer(sel.playerId)) sel.playerId = players[0].id;
-    const lessons = store.lessonsForPlayer(sel.playerId);
+    const lessons = store.sessionLogsForPlayer(sel.playerId);
     if (!sel.lessonId || !lessons.some(function (l) { return l.id === sel.lessonId; })) {
       sel.lessonId = lessons.length ? lessons[0].id : null;
     }
@@ -44,10 +43,13 @@
   // ---- drill add/edit form ---------------------------------------------------
   function openDrillForm(existing) {
     const d = existing || {};
+    const catOptions = model.DRILL_CATEGORIES.map(function (c) {
+      return { value: c, label: model.DRILL_CATEGORY_LABELS[c] || c };
+    });
     const html =
       ui.formField({ type: 'text', name: 'name', label: 'Drill name', value: d.name, required: true, placeholder: 'e.g. Tee Work' }) +
-      ui.formField({ type: 'select', name: 'category', label: 'Category', value: d.category || 'Hitting', options: model.DRILL_CATEGORIES }) +
-      ui.formField({ type: 'textarea', name: 'defaultNotes', label: 'Default notes', value: d.defaultNotes, placeholder: 'Cues, set/rep scheme, focus…' }) +
+      ui.formField({ type: 'select', name: 'category', label: 'Category', value: d.category || 'hitting', options: catOptions }) +
+      ui.formField({ type: 'textarea', name: 'description', label: 'Description', value: d.description, placeholder: 'Cues, set/rep scheme, focus…' }) +
       '<div class="modal-actions">' +
         '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
         '<button class="btn btn-primary" data-act="save">' + (existing ? 'Save changes' : 'Add drill') + '</button>' +
@@ -57,7 +59,7 @@
       modal.querySelector('[data-act="cancel"]').addEventListener('click', close);
       modal.querySelector('[data-act="save"]').addEventListener('click', function () {
         const get = function (n) { const el = modal.querySelector('[name="' + n + '"]'); return el ? el.value.trim() : ''; };
-        const data = { name: get('name'), category: get('category'), defaultNotes: get('defaultNotes') };
+        const data = { name: get('name'), category: get('category'), description: get('description') };
         if (!data.name) { ui.toast('Drill name is required.'); return; }
         if (existing) store.update('drills', d.id, data); else store.insert('drills', data);
         close();
@@ -81,7 +83,7 @@
       modal.querySelector('[data-act="cancel"]').addEventListener('click', close);
       modal.querySelector('[data-act="save"]').addEventListener('click', function () {
         const date = modal.querySelector('[name="date"]').value || CT.todayISO();
-        const lesson = store.insert('lessons', { playerId: playerId, date: date });
+        const lesson = store.insert('sessionLogs', { playerId: playerId, date: date });
         sel.lessonId = lesson.id;
         close();
         ui.toast('Session created');
@@ -95,7 +97,7 @@
     let items = lessons.map(function (l) {
       return '<button class="btn btn-ghost btn-sm btn-block" data-act="assign" data-id="' + esc(drill.id) +
         '" data-lesson="' + esc(l.id) + '">' + esc(CT.formatDate(l.date)) +
-        ' · ' + (l.drillIds.length) + ' drill(s)</button>';
+        ' · ' + (l.extraDrillIds.length) + ' drill(s)</button>';
     }).join('');
     items += '<button class="btn btn-ghost btn-sm btn-block" data-act="assign-new" data-id="' + esc(drill.id) +
       '"><i data-lucide="plus"></i>New session for ' + esc(player.name.split(' ').slice(-1)[0]) + '</button>';
@@ -111,7 +113,7 @@
       '<button class="drag-handle" tabindex="-1" aria-hidden="true" title="Drag into a session"><i data-lucide="grip-vertical"></i></button>' +
       '<div class="drill-main">' +
         '<div class="drill-name">' + esc(drill.name) + '</div>' +
-        (drill.defaultNotes ? '<div class="drill-sub muted">' + esc(drill.defaultNotes) + '</div>' : '') +
+        (drill.description ? '<div class="drill-sub muted">' + esc(drill.description) + '</div>' : '') +
       '</div>' +
       '<div class="drill-acts">' +
         assignMenu(drill, lessons, player) +
@@ -129,7 +131,7 @@
       if (!rows.length) return;
       body +=
         '<div class="lib-group">' +
-          '<div class="lib-cat">' + esc(cat) + ' <span class="num">' + rows.length + '</span></div>' +
+          '<div class="lib-cat">' + esc(model.DRILL_CATEGORY_LABELS[cat] || cat) + ' <span class="num">' + rows.length + '</span></div>' +
           '<div class="drill-lib-list" data-cat="' + esc(cat) + '" role="list">' +
             rows.map(function (d) { return libraryDrillRow(d, lessons, player); }).join('') +
           '</div>' +
@@ -158,7 +160,7 @@
   function sessionRow(drillId, index, total) {
     const d = store.getDrill(drillId);
     const name = d ? d.name : 'Removed drill';
-    const cat = d ? d.category : '—';
+    const cat = d ? (model.DRILL_CATEGORY_LABELS[d.category] || d.category) : '—';
     return '<div class="session-row' + (d ? '' : ' is-missing') + '" data-id="' + esc(drillId) + '" data-index="' + index + '" role="listitem">' +
       '<button class="drag-handle" tabindex="-1" aria-hidden="true"><i data-lucide="grip-vertical"></i></button>' +
       '<span class="seq num">' + (index + 1) + '</span>' +
@@ -174,24 +176,21 @@
     '</div>';
   }
 
-  function quickStatsHtml(lesson) {
-    const fields = QUICK_KEYS.map(function (k) {
-      const m = model.METRIC_BY_KEY[k];
-      const v = lesson.quickStats && lesson.quickStats[k] != null ? lesson.quickStats[k] : '';
-      return ui.formField({ type: 'number', name: 'qs_' + k, label: m.label + ' (' + m.unit + ')', value: v, step: 0.1 });
-    }).join('');
+  function ratingHtml(lesson) {
     const rating = lesson.ratingDelta == null ? '' : lesson.ratingDelta;
-    return '<div class="qs-grid">' + fields +
+    return '<div class="qs-grid">' +
       ui.formField({ type: 'number', name: 'ratingDelta', label: 'Rating Δ', value: rating, step: 0.1, min: -2, max: 2, help: 'Coach grade change (−2…+2).' }) +
     '</div>' +
-    '<button class="btn btn-primary btn-sm" id="save-stats"><i data-lucide="save"></i>Save stats &amp; rating</button>';
+    '<p class="muted" style="font-size:.8rem;margin:.4rem 0;">Measured numbers (exit velo, times…) belong in ' +
+      '<a href="#/assess/new/' + esc(lesson.playerId) + '">Assessments</a> so they reach charts and percentiles.</p>' +
+    '<button class="btn btn-primary btn-sm" id="save-stats"><i data-lucide="save"></i>Save rating</button>';
   }
 
   function sessionPanelHtml(player, lesson, lessons) {
     let tabs = lessons.map(function (l) {
       const active = l.id === (lesson && lesson.id) ? ' active' : '';
       return '<button class="tabbar-item' + active + '" data-act="pick-lesson" data-lesson="' + esc(l.id) + '">' +
-        esc(CT.relativeDate(l.date)) + ' <span class="num">(' + l.drillIds.length + ')</span></button>';
+        esc(CT.relativeDate(l.date)) + ' <span class="num">(' + l.extraDrillIds.length + ')</span></button>';
     }).join('');
 
     let board;
@@ -200,16 +199,16 @@
         'Create a session for ' + esc(player.name) + ', then drag drills in from the library.',
         '<button class="btn btn-primary btn-sm" id="new-session"><i data-lucide="plus"></i>New session</button>');
     } else {
-      const rows = lesson.drillIds.length
-        ? lesson.drillIds.map(function (id, i) { return sessionRow(id, i, lesson.drillIds.length); }).join('')
+      const rows = lesson.extraDrillIds.length
+        ? lesson.extraDrillIds.map(function (id, i) { return sessionRow(id, i, lesson.extraDrillIds.length); }).join('')
         : '<div class="session-drop-hint muted"><i data-lucide="move"></i> Drag drills here, or use a drill\'s “Assign” menu.</div>';
-      const savedDefaults = lesson.drillIds
-        .map(function (id) { const d = store.getDrill(id); return d && d.defaultNotes ? '• ' + d.defaultNotes : ''; })
+      const savedDefaults = lesson.extraDrillIds
+        .map(function (id) { const d = store.getDrill(id); return d && d.description ? '• ' + d.description : ''; })
         .filter(Boolean);
       board =
         '<div class="session-meta">' +
           '<div class="kv-row"><span class="k">Date</span><span class="v num">' + esc(CT.formatDate(lesson.date)) + '</span></div>' +
-          '<div class="kv-row"><span class="k">Drills</span><span class="v num">' + lesson.drillIds.length + '</span></div>' +
+          '<div class="kv-row"><span class="k">Drills</span><span class="v num">' + lesson.extraDrillIds.length + '</span></div>' +
           '<div class="kv-row"><span class="k">Rating</span><span class="v">' + ratingChip(lesson.ratingDelta) + '</span></div>' +
         '</div>' +
         '<div class="session-col" data-lesson="' + esc(lesson.id) + '" role="list" aria-label="Drills in this session">' + rows + '</div>' +
@@ -218,8 +217,8 @@
           '<textarea id="session-notes" class="notes-editor" placeholder="What you worked on, cues, what to repeat next time… (⌘/Ctrl+Enter to log)">' + esc(lesson.notes) + '</textarea>' +
           (savedDefaults.length ? '<div class="muted notes-hint">From drill defaults: ' + esc(savedDefaults.join('  ')) + '</div>' : '') +
         '</div>' +
-        '<details class="qs-wrap"><summary class="btn btn-ghost btn-sm"><i data-lucide="activity"></i>Quick stats &amp; rating</summary>' +
-          quickStatsHtml(lesson) +
+        '<details class="qs-wrap"><summary class="btn btn-ghost btn-sm"><i data-lucide="activity"></i>Session rating</summary>' +
+          ratingHtml(lesson) +
         '</details>';
     }
 
@@ -263,7 +262,7 @@
     function persist(msg) {
       const ids = col.toArray(); // array of data-id, current visual order
       announce(msg + ' — now ' + ids.length + ' drill(s).');
-      setTimeout(function () { store.setLessonDrills(lesson.id, ids); CT.router.route(); }, 0);
+      setTimeout(function () { store.setSessionDrills(lesson.id, ids); CT.router.route(); }, 0);
     }
     window.Sortable.create(col, {
       group: 'board', animation: 150, handle: '.drag-handle',
@@ -284,7 +283,7 @@
     let timer = null;
     function grow() { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
     function save(loud) {
-      store.setLessonNotes(lesson.id, ta.value);
+      store.setSessionNotes(lesson.id, ta.value);
       if (savedTag) savedTag.textContent = 'Saved';
       if (loud) ui.toast('Note logged');
     }
@@ -301,49 +300,43 @@
     });
   }
 
-  function wireQuickStats(root, lesson) {
+  function wireRating(root, lesson) {
     if (!lesson) return;
     const btn = root.querySelector('#save-stats');
     if (!btn) return;
     btn.addEventListener('click', function () {
-      const quickStats = {};
-      QUICK_KEYS.forEach(function (k) {
-        const el = root.querySelector('[name="qs_' + k + '"]');
-        const v = el ? Number(el.value) : NaN;
-        if (el && el.value !== '' && Number.isFinite(v)) quickStats[k] = v;
-      });
       const rEl = root.querySelector('[name="ratingDelta"]');
       const rv = rEl && rEl.value !== '' ? Number(rEl.value) : null;
-      store.update('lessons', lesson.id, { quickStats: quickStats, ratingDelta: (rv != null && Number.isFinite(rv)) ? rv : null });
-      ui.toast('Stats & rating saved');
+      store.update('sessionLogs', lesson.id, { ratingDelta: (rv != null && Number.isFinite(rv)) ? rv : null });
+      ui.toast('Rating saved');
       CT.router.route();
     });
   }
 
   function reorder(lesson, index, dir) {
-    const ids = lesson.drillIds.slice();
+    const ids = lesson.extraDrillIds.slice();
     const to = index + dir;
     if (to < 0 || to >= ids.length) return;
     const moved = ids[index];
     ids.splice(index, 1);
     ids.splice(to, 0, moved);
-    store.setLessonDrills(lesson.id, ids);
+    store.setSessionDrills(lesson.id, ids);
     announce('Moved ' + drillName(moved) + ' to position ' + (to + 1) + ' of ' + ids.length + '.');
     CT.router.route();
   }
 
   function removeAt(lesson, index) {
-    const ids = lesson.drillIds.slice();
+    const ids = lesson.extraDrillIds.slice();
     const removed = ids[index];
     ids.splice(index, 1);
-    store.setLessonDrills(lesson.id, ids);
+    store.setSessionDrills(lesson.id, ids);
     announce('Removed ' + drillName(removed) + ' from the session.');
     CT.router.route();
   }
 
   function assignDrill(lesson, drillId) {
-    const ids = lesson.drillIds.concat([drillId]);
-    store.setLessonDrills(lesson.id, ids);
+    const ids = lesson.extraDrillIds.concat([drillId]);
+    store.setSessionDrills(lesson.id, ids);
     announce('Assigned ' + drillName(drillId) + ' to ' + CT.formatDate(lesson.date) + '.');
     CT.router.route();
   }
@@ -367,8 +360,8 @@
 
     ensureSelection(players, ctx && ctx.param);
     const player = store.getPlayer(sel.playerId);
-    const lessons = store.lessonsForPlayer(sel.playerId);
-    const lesson = sel.lessonId ? store.getLesson(sel.lessonId) : null;
+    const lessons = store.sessionLogsForPlayer(sel.playerId);
+    const lesson = sel.lessonId ? store.getSessionLog(sel.lessonId) : null;
 
     html += '<div class="drills-view drills-board">' +
       libraryHtml(lessons, player) +
@@ -411,7 +404,7 @@
     // Assign menus (keyboard/no-drag fallback).
     root.querySelectorAll('[data-act="assign"]').forEach(function (b) {
       b.addEventListener('click', function () {
-        const l = store.getLesson(b.getAttribute('data-lesson'));
+        const l = store.getSessionLog(b.getAttribute('data-lesson'));
         if (l) assignDrill(l, b.getAttribute('data-id'));
       });
     });
@@ -434,7 +427,7 @@
 
     wireDrag(root, lesson);
     wireNotes(root, lesson);
-    wireQuickStats(root, lesson);
+    wireRating(root, lesson);
   }
 
   // Hosted inside the Sessions wrapper (not a standalone nav destination).

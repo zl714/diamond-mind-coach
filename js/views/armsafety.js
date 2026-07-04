@@ -24,7 +24,7 @@
   };
 
   // ----- helpers -----
-  function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
+  function isPitcher(p) { return CT.model.isPitcher(p); }
 
   // A player belongs on the console if they pitch OR have any logged workload.
   function consolePlayers() {
@@ -263,7 +263,7 @@
     const logs = store.byPlayer('workloadLogs', player.id);
     const v = ps.evaluate(player, logs);
     const age = model.ageFromBirthdate(player.birthdate);
-    const sub = (player.ageBand || v.ageBand) + (age != null ? ' · ' + age + ' yrs' : '') +
+    const sub = v.ageBand + (age != null ? ' · ' + age + ' yrs' : '') +
       ' · daily max ' + v.dailyMax + ' · throws ' + (player.throws || '?');
 
     let body = flagBanner(v) + painBanner(player) + kpiGrid(v) + reasonsList(v);

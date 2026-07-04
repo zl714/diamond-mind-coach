@@ -12,11 +12,10 @@
      correct. Re-finalizing is idempotent (each outing's workload is logged once,
      tracked by appearance id) so Pitch Smart is never double-counted.
 
-   FOUNDATION-SAFE METADATA
-   The Game model has no ipg / finalized / version / pitching-decision fields, and
-   store.insert() normalizes through the factory (extra keys are dropped). So this
-   view stores its own per-game metadata as a JSON trailer on game.notes behind a
-   tag, and strips it for display. Nothing in the foundation is modified. */
+   REAL METADATA (v3)
+   Game metadata — ipg, final, boxVersion, decisions — are REAL model fields now
+   (the old '#CTGAMEMETA#' notes trailer is parsed away by the v2->v3 migration),
+   so this view reads/writes them directly through store.update. */
 (function () {
   'use strict';
 
@@ -24,10 +23,8 @@
   const ui = CT.ui, store = CT.store, model = CT.model, stats = CT.stats, esc = CT.escapeHtml;
 
   // ---------------------------------------------------------------------------
-  // Per-game metadata (ipg / finalize / version / decisions) packed into notes.
+  // Per-game metadata (real fields on the Game record since v3).
   // ---------------------------------------------------------------------------
-  const META_TAG = '\n#CTGAMEMETA#';
-
   function defaultIpg() {
     const season = (store.all('seasons')[0]) || null;
     const team = (store.all('teams')[0]) || null;
@@ -35,31 +32,17 @@
     return model.inningsPerGame(level);
   }
 
-  function defaultMeta() { return { ipg: defaultIpg(), final: false, v: 1, dec: {} }; }
-
-  function splitNotes(raw) {
-    raw = raw || '';
-    const i = raw.indexOf(META_TAG);
-    if (i < 0) return { notes: raw, meta: defaultMeta() };
-    const notes = raw.slice(0, i).replace(/\s+$/, '');
-    let meta = defaultMeta();
-    try { meta = Object.assign(defaultMeta(), JSON.parse(raw.slice(i + META_TAG.length)) || {}); } catch (e) { /* ignore */ }
-    if (!meta.dec || typeof meta.dec !== 'object') meta.dec = {};
-    return { notes: notes, meta: meta };
+  function metaOf(game) {
+    return {
+      ipg: game.ipg || defaultIpg(),
+      final: !!game.final,
+      v: game.boxVersion || 1,
+      dec: game.decisions || {}
+    };
   }
-  function joinNotes(notes, meta) { return (notes || '') + META_TAG + JSON.stringify(meta); }
-
-  function metaOf(game) { return splitNotes(game.notes).meta; }
-  function cleanNotes(game) { return splitNotes(game.notes).notes; }
-  function gameIpg(game) { return metaOf(game).ipg || defaultIpg(); }
-  function isFinal(game) { return !!metaOf(game).final; }
-
-  // Persist a partial metadata patch back onto the game (keeps clean notes intact).
-  function patchMeta(game, patch) {
-    const split = splitNotes(game.notes);
-    const meta = Object.assign({}, split.meta, patch);
-    return store.update('games', game.id, { notes: joinNotes(split.notes, meta) });
-  }
+  function cleanNotes(game) { return game.notes || ''; }
+  function gameIpg(game) { return game.ipg || defaultIpg(); }
+  function isFinal(game) { return !!game.final; }
 
   // ---------------------------------------------------------------------------
   // small helpers
@@ -113,7 +96,7 @@
   // ===========================================================================
   function openGameForm(existing) {
     const g = existing || {};
-    const meta = existing ? metaOf(existing) : defaultMeta();
+    const meta = existing ? metaOf(existing) : { ipg: defaultIpg(), final: false, v: 1, dec: {} };
     const html =
       '<div class="field-row">' +
         ui.formField({ type: 'date', name: 'date', label: 'Date', value: existing ? g.date : CT.todayISO(), required: true }) +
@@ -138,7 +121,6 @@
         const opponent = r.val('opponent');
         if (!opponent) { ui.toast('Opponent is required.'); return; }
         if (!r.val('date')) { ui.toast('Date is required.'); return; }
-        const newMeta = Object.assign({}, meta, { ipg: Number(r.val('ipg')) || defaultIpg() });
         const season = store.all('seasons')[0], team = store.all('teams')[0];
         const data = {
           date: r.val('date'),
@@ -148,7 +130,8 @@
           scoreAgainst: r.num('scoreAgainst'),
           seasonId: g.seasonId || (season && season.id) || null,
           teamId: g.teamId || (team && team.id) || null,
-          notes: joinNotes(r.val('notes'), newMeta)
+          ipg: Number(r.val('ipg')) || defaultIpg(),
+          notes: r.val('notes')
         };
         let saved;
         if (existing) saved = store.update('games', g.id, data);
@@ -268,7 +251,9 @@
       const del = modal.querySelector('[data-act="del"]');
       if (del) del.addEventListener('click', function () {
         store.remove('pitchingAppearances', existing.id);
-        const m = metaOf(game); delete m.dec[existing.id]; patchMeta(game, { dec: m.dec });
+        const next = Object.assign({}, game.decisions);
+        delete next[existing.id];
+        store.update('games', game.id, { decisions: next });
         close(); ui.toast('Outing deleted'); CT.router.route();
       });
       modal.querySelector('[data-act="save"]').addEventListener('click', function () {
@@ -280,8 +265,10 @@
         let saved;
         if (existing) saved = store.update('pitchingAppearances', existing.id, data);
         else saved = store.insert('pitchingAppearances', data);
-        // Decision is not a model field — persist it on the game's metadata map.
-        const m = metaOf(game); m.dec[saved.id] = r.val('decision'); patchMeta(game, { dec: m.dec });
+        // Decision lives on the game's real decisions map (v3 field).
+        const next = Object.assign({}, game.decisions);
+        if (r.val('decision')) next[saved.id] = r.val('decision'); else delete next[saved.id];
+        store.update('games', game.id, { decisions: next });
         close();
         ui.toast('Pitching outing saved');
         CT.router.route();
@@ -328,35 +315,35 @@
   }
 
   // ===========================================================================
-  // Finalize-then-version: commit append-only WorkloadLogs (idempotent per outing).
+  // Finalize-then-version: commit append-only WorkloadLogs (idempotent per outing
+  // via sourceRef {kind:'box', id:<appearanceId>} — a real field since v3).
   // ===========================================================================
-  function workloadTag(apptId) { return '[box:' + apptId + ']'; }
-
   function finalizeGame(game) {
     const apps = gameLines(game).pit;
     let logged = 0;
     apps.forEach(function (a) {
       if (a.outs <= 0 && a.pitches <= 0) return; // nothing to log
       const existing = store.byPlayer('workloadLogs', a.playerId).some(function (w) {
-        return (w.notes || '').indexOf(workloadTag(a.id)) >= 0;
+        return w.sourceRef && w.sourceRef.kind === 'box' && w.sourceRef.id === a.id;
       });
       if (existing) return; // already committed this outing — never double-count
       store.append('workloadLogs', {
         playerId: a.playerId, date: game.date, type: 'game',
         pitches: a.pitches, outs: a.outs,
-        notes: 'Game ' + vsLabel(game) + ' ' + workloadTag(a.id)
+        sourceRef: { kind: 'box', id: a.id },
+        notes: 'Game ' + vsLabel(game)
       });
       logged++;
     });
-    patchMeta(game, { final: true });
+    store.update('games', game.id, { final: true });
     ui.toast(logged ? ('Finalized — logged ' + logged + ' outing(s) to Pitch Smart') : 'Game finalized');
     CT.router.route();
   }
 
   function reopenGame(game) {
-    const meta = metaOf(game);
-    patchMeta(game, { final: false, v: (meta.v || 1) + 1 });
-    ui.toast('Reopened as v' + ((meta.v || 1) + 1) + ' — already-logged workload is locked');
+    const nextV = (game.boxVersion || 1) + 1;
+    store.update('games', game.id, { final: false, boxVersion: nextV });
+    ui.toast('Reopened as v' + nextV + ' — already-logged workload is locked');
     CT.router.route();
   }
 

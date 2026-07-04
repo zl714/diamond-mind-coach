@@ -12,6 +12,54 @@
   const AGE_BANDS = ['9-10U', '11-12U', '13-14U', '15-16U', '17-18U'];
   const LEVELS = ['youth', 'HS', 'college', 'pro'];
 
+  // Positions are a fixed enum (v3). Free text is normalized on save/migration.
+  const POSITIONS = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'OF', 'IF', 'UTIL'];
+  const POSITION_LABELS = {
+    P: 'Pitcher', C: 'Catcher', '1B': 'First Base', '2B': 'Second Base',
+    '3B': 'Third Base', SS: 'Shortstop', LF: 'Left Field', CF: 'Center Field',
+    RF: 'Right Field', OF: 'Outfield', IF: 'Infield', UTIL: 'Utility'
+  };
+  // Free-text -> enum mapping (order matters: most specific first).
+  const POSITION_PATTERNS = [
+    [/^p$|pitch/i, 'P'],
+    [/^c$|catch/i, 'C'],
+    [/^1b$|first/i, '1B'],
+    [/^2b$|second/i, '2B'],
+    [/^3b$|third/i, '3B'],
+    [/^ss$|short/i, 'SS'],
+    [/^lf$|left/i, 'LF'],
+    [/^cf$|center|centre/i, 'CF'],
+    [/^rf$|right/i, 'RF'],
+    [/^of$|outfield/i, 'OF'],
+    [/^if$|infield/i, 'IF'],
+    [/^util|^dh$|designated|utility/i, 'UTIL']
+  ];
+  function normalizePosition(text) {
+    const t = String(text || '').trim();
+    if (!t) return null;
+    if (POSITIONS.indexOf(t.toUpperCase()) >= 0) return t.toUpperCase();
+    for (let i = 0; i < POSITION_PATTERNS.length; i++) {
+      if (POSITION_PATTERNS[i][0].test(t)) return POSITION_PATTERNS[i][1];
+    }
+    return null;
+  }
+  function normalizePositions(list) {
+    const out = [];
+    (Array.isArray(list) ? list : []).forEach(function (x) {
+      const p = normalizePosition(x);
+      if (p && out.indexOf(p) < 0) out.push(p);
+    });
+    return out;
+  }
+  // Single source of truth for pitcher detection (replaces the /pitch/i regex
+  // that used to be duplicated across five view files).
+  function isPitcher(player) {
+    return !!(player && Array.isArray(player.positions) && player.positions.indexOf('P') >= 0);
+  }
+  function isCatcher(player) {
+    return !!(player && Array.isArray(player.positions) && player.positions.indexOf('C') >= 0);
+  }
+
   // Innings-per-game by competitive level (used to scale ERA, K/9, BB/9).
   const INNINGS_PER_GAME = { youth: 6, HS: 7, college: 9, pro: 9 };
 
@@ -40,6 +88,13 @@
 
   function ageBandFromBirthdate(birthdateISO, asOf) {
     return ageBandFromAge(ageFromBirthdate(birthdateISO, asOf));
+  }
+
+  // v3: age band is ALWAYS derived from birthdate at read time (never stored),
+  // so players age across band boundaries without stale-band drift.
+  function bandFor(player, asOf) {
+    if (!player) return null;
+    return ageBandFromBirthdate(player.birthdate, asOf) || player.ageBand || null;
   }
 
   // Reasonable default competitive level from age (coach can override).
@@ -79,7 +134,8 @@
     { key: 'hardHitPct', label: 'Hard-Hit %', unit: '%', group: 'hitting', tier: 'derived', contexts: HITTING_CONTEXTS, range: [0, 100] },
     { key: 'barrelPct', label: 'Barrel %', unit: '%', group: 'hitting', tier: 'advanced', contexts: ['game', 'live-bp'], range: [0, 100], youthNA: true },
     // Pitching
-    { key: 'fastballVelo', label: 'Fastball Velo', unit: 'mph', group: 'pitching', tier: 'core', contexts: PITCHING_CONTEXTS, range: [30, 105], bandMax: { '9-10U': 60, '11-12U': 70, '13-14U': 80, '15-16U': 88, '17-18U': 95 } },
+    // v3 relabel: "Throwing Velo" (key unchanged so benchmarks + old readings keep working).
+    { key: 'fastballVelo', label: 'Throwing Velo', unit: 'mph', group: 'pitching', tier: 'core', contexts: PITCHING_CONTEXTS, range: [30, 105], bandMax: { '9-10U': 60, '11-12U': 70, '13-14U': 80, '15-16U': 88, '17-18U': 95 } },
     { key: 'secondaryVelo', label: 'Secondary Velo', unit: 'mph', group: 'pitching', tier: 'core', contexts: PITCHING_CONTEXTS, range: [25, 95] },
     { key: 'veloSeparation', label: 'Velo Separation', unit: 'mph', group: 'pitching', tier: 'core', contexts: PITCHING_CONTEXTS, range: [0, 25] },
     { key: 'strikePct', label: 'Strike %', unit: '%', group: 'pitching', tier: 'core', contexts: PITCHING_CONTEXTS, range: [0, 100] },
@@ -90,10 +146,14 @@
     { key: 'infieldVelo', label: 'Infield Velo', unit: 'mph', group: 'throwing', tier: 'core', contexts: GENERIC_CONTEXTS, range: [30, 100] },
     { key: 'outfieldVelo', label: 'Outfield Velo', unit: 'mph', group: 'throwing', tier: 'core', contexts: GENERIC_CONTEXTS, range: [30, 105] },
     { key: 'moundVelo', label: 'Mound Velo', unit: 'mph', group: 'throwing', tier: 'core', contexts: GENERIC_CONTEXTS, range: [30, 105] },
-    { key: 'maxThrowDist', label: 'Max Throw Distance', unit: 'ft', group: 'throwing', tier: 'core', contexts: GENERIC_CONTEXTS, range: [50, 400] },
+    // v3 relabel: "Long-Toss Distance" (key unchanged — do NOT add a longTossDist key).
+    { key: 'maxThrowDist', label: 'Long-Toss Distance', unit: 'ft', group: 'throwing', tier: 'core', contexts: GENERIC_CONTEXTS, range: [50, 400] },
     { key: 'popTime', label: 'Catcher Pop Time', unit: 'sec', group: 'throwing', tier: 'core', contexts: GENERIC_CONTEXTS, range: [1.6, 3.2], lowerBetter: true, basePath: true },
     // Athleticism
     { key: 'sixtyYard', label: '60-Yard Dash', unit: 'sec', group: 'athleticism', tier: 'core', contexts: ['test'], range: [6.0, 12.0], lowerBetter: true },
+    // v3 addition: 30-yard dash — the youth-appropriate speed test (no benchmark
+    // rows yet, so it reads as trend-vs-self).
+    { key: 'thirtyYard', label: '30-Yard Dash', unit: 'sec', group: 'athleticism', tier: 'core', contexts: ['test'], range: [3.0, 8.5], lowerBetter: true },
     { key: 'homeToFirst', label: 'Home-to-First', unit: 'sec', group: 'athleticism', tier: 'core', contexts: ['test'], range: [3.5, 6.5], lowerBetter: true, handedness: true },
     { key: 'proAgility', label: 'Pro-Agility 5-10-5', unit: 'sec', group: 'athleticism', tier: 'core', contexts: ['test'], range: [3.8, 7.0], lowerBetter: true },
     // Anthro (also tracked as time-series AnthroReading)
@@ -104,6 +164,41 @@
 
   function metric(key) { return METRIC_BY_KEY[key] || null; }
   function metricsByGroup(group) { return METRIC_CATALOG.filter(function (m) { return m.group === group; }); }
+
+  // ---------------------------------------------------------------------------
+  // Assessment MODULES (v3) — the brief, coach-friendly assessment surface.
+  // Each module maps to a small set of catalog metrics; the rest of the 25-key
+  // catalog stays readable (legacy readings render) but is not in the entry UI.
+  // ---------------------------------------------------------------------------
+  const ASSESS_MODULES = [
+    { id: 'hitting', label: 'Hitting', icon: 'zap', metrics: ['exitVeloMax', 'batSpeed'], notes: true,
+      blurb: 'Exit velo off the tee + bat speed.' },
+    { id: 'throwing', label: 'Throwing', icon: 'target', metrics: ['fastballVelo', 'maxThrowDist'], notes: false,
+      blurb: 'Throwing velo + long-toss distance.' },
+    { id: 'speed', label: 'Speed', icon: 'timer', metrics: ['sixtyYard', 'thirtyYard', 'homeToFirst'], notes: false,
+      blurb: '60/30-yard dash + home-to-first.', speedChoice: ['sixtyYard', 'thirtyYard'] },
+    { id: 'fielding', label: 'Fielding', icon: 'shield', metrics: ['popTime'], notes: true, catchersOnly: true,
+      blurb: 'Catcher pop time (+ fielding notes).' },
+    { id: 'body', label: 'Body', icon: 'ruler', metrics: [], anthro: true, notes: false,
+      blurb: 'Height & weight (growth tracking).' }
+  ];
+  const ASSESS_MODULE_BY_ID = ASSESS_MODULES.reduce(function (a, m) { a[m.id] = m; return a; }, {});
+  const MODULE_IDS = ASSESS_MODULES.map(function (m) { return m.id; });
+
+  // Best-fit module for ANY catalog metric (used to tag migrated sessions).
+  function moduleForMetric(key) {
+    const m = METRIC_BY_KEY[key];
+    if (!m) return null;
+    if (key === 'popTime') return 'fielding';
+    switch (m.group) {
+      case 'hitting': return 'hitting';
+      case 'pitching':
+      case 'throwing': return 'throwing';
+      case 'athleticism': return 'speed';
+      case 'anthro': return 'body';
+      default: return null;
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Generic helpers
@@ -124,11 +219,11 @@
       id: str(d.id, id('plr')),
       name: str(d.name, 'Unnamed Player'),
       birthdate: str(d.birthdate, ''),               // ISO yyyy-mm-dd, REQUIRED to age-normalize
-      ageBand: d.ageBand || ageBandFromAge(age) || '',
+      // v3: NO stored ageBand — use model.bandFor(player) (derived from birthdate).
       level: str(d.level, d.birthdate ? defaultLevelFromAge(age) : 'youth'),
       bats: str(d.bats, 'R'),                          // R|L|S
       throws: str(d.throws, 'R'),                      // R|L
-      positions: Array.isArray(d.positions) ? d.positions.map(String) : (d.position ? [String(d.position)] : []),
+      positions: normalizePositions(Array.isArray(d.positions) ? d.positions : (d.position ? [d.position] : [])),
       teamId: d.teamId || null,
       jersey: str(d.jersey, ''),
       notes: str(d.notes, ''),
@@ -153,11 +248,23 @@
 
   function AssessmentSession(d) {
     d = d || {};
+    const modules = (Array.isArray(d.modules) ? d.modules : [])
+      .map(String).filter(function (m) { return MODULE_IDS.indexOf(m) >= 0; });
+    const moduleNotes = {};
+    if (d.moduleNotes && typeof d.moduleNotes === 'object') {
+      Object.keys(d.moduleNotes).forEach(function (k) {
+        if (MODULE_IDS.indexOf(k) >= 0 && d.moduleNotes[k] != null && String(d.moduleNotes[k]).trim() !== '') {
+          moduleNotes[k] = String(d.moduleNotes[k]);
+        }
+      });
+    }
     return {
       id: str(d.id, id('asmt')),
       playerId: str(d.playerId, ''),
       date: str(d.date, CT.todayISO()),
       type: str(d.type, 'assessment'),                 // assessment|showcase|practice
+      modules: modules,                                // v3: which modules were run
+      moduleNotes: moduleNotes,                        // v3: { hitting?, fielding?, ... }
       location: str(d.location, ''),
       notes: str(d.notes, ''),
       createdAt: str(d.createdAt, nowISO())
@@ -180,6 +287,9 @@
       device: DEVICES.indexOf(d.device) >= 0 ? d.device : 'manual',
       confidence: CONFIDENCE.indexOf(d.confidence) >= 0 ? d.confidence : 'med',
       basePath: d.basePath == null ? null : num(d.basePath, null), // for pop-time (60/70/80/90)
+      // v3: provenance — where the number came from.
+      source: ['assessment', 'session', 'migrated-quickstat'].indexOf(d.source) >= 0
+        ? d.source : (d.assessmentSessionId ? 'assessment' : 'session'),
       date: str(d.date, CT.todayISO()),
       correctsId: d.correctsId || null,
       voided: bool(d.voided),
@@ -189,6 +299,15 @@
 
   function Game(d) {
     d = d || {};
+    // v3: game metadata is REAL fields (the old '#CTGAMEMETA#' notes trailer is
+    // parsed away by the v2->v3 migration).
+    const decisions = {};
+    if (d.decisions && typeof d.decisions === 'object') {
+      Object.keys(d.decisions).forEach(function (k) {
+        const v = String(d.decisions[k] || '');
+        if (['W', 'L', 'S', 'H', 'BS'].indexOf(v) >= 0) decisions[k] = v;
+      });
+    }
     return {
       id: str(d.id, id('game')),
       seasonId: d.seasonId || null,
@@ -198,6 +317,10 @@
       homeAway: str(d.homeAway, 'home'),
       scoreFor: d.scoreFor == null ? null : num(d.scoreFor, null),
       scoreAgainst: d.scoreAgainst == null ? null : num(d.scoreAgainst, null),
+      ipg: [6, 7, 9].indexOf(Number(d.ipg)) >= 0 ? Number(d.ipg) : null, // null = derive from level
+      final: bool(d.final),
+      boxVersion: Math.max(1, num(d.boxVersion, 1)),
+      decisions: decisions,                            // { pitchingAppearanceId: 'W'|'L'|'S'|'H'|'BS' }
       notes: str(d.notes, ''),
       createdAt: str(d.createdAt, nowISO())
     };
@@ -277,6 +400,10 @@
       pitches: num(d.pitches, 0),
       outs: num(d.outs, 0),
       rpe: d.rpe == null ? null : num(d.rpe, null), // 1-10 perceived exertion
+      // v3: what produced this log ({kind:'box'|'session', id}) — replaces the
+      // '[box:<id>]' idempotence substring that used to live inside notes.
+      sourceRef: (d.sourceRef && typeof d.sourceRef === 'object' && d.sourceRef.id)
+        ? { kind: str(d.sourceRef.kind, 'box'), id: str(d.sourceRef.id, '') } : null,
       notes: str(d.notes, ''),
       createdAt: str(d.createdAt, nowISO())
     };
@@ -284,6 +411,7 @@
 
   function DailyCheckIn(d) {
     d = d || {};
+    const painLevel = d.painLevel == null ? null : num(d.painLevel, null); // 0-10
     return {
       id: str(d.id, id('chk')),
       playerId: str(d.playerId, ''),
@@ -292,10 +420,42 @@
       fatigue: d.fatigue == null ? null : num(d.fatigue, null),    // 0-10
       sleepHours: d.sleepHours == null ? null : num(d.sleepHours, null),
       mood: d.mood == null ? null : num(d.mood, null),             // 1-5
-      armPain: bool(d.armPain),
+      painLevel: painLevel,                                        // v3: raw 0-10 pain (schema field)
+      armPain: painLevel != null ? painLevel >= 3 : bool(d.armPain),
       painLocation: str(d.painLocation, ''),
       notes: str(d.notes, ''),
       createdAt: str(d.createdAt, nowISO())
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Program (v3): week x day structure with drill/step items. Old cloned
+  // template instances are migrated to single-day programs (checklist -> steps).
+  // ---------------------------------------------------------------------------
+  const PROGRAM_TYPES = ['throwing', 'hitting', 'strength', 'custom'];
+
+  function ProgramItem(x) {
+    x = x || {};
+    if (x.kind === 'drill' || x.drillId) {
+      return {
+        id: str(x.id, id('pi')),
+        kind: 'drill',
+        drillId: str(x.drillId, ''),
+        sets: x.sets == null ? null : num(x.sets, null),
+        reps: x.reps == null ? null : num(x.reps, null),
+        notes: str(x.notes, '')
+      };
+    }
+    return { id: str(x.id, id('pi')), kind: 'step', text: str(x.text, '') };
+  }
+
+  function ProgramDay(x) {
+    x = x || {};
+    return {
+      weekIndex: num(x.weekIndex, 0),
+      dayIndex: num(x.dayIndex, 0),
+      title: str(x.title, ''),
+      items: (Array.isArray(x.items) ? x.items : []).map(ProgramItem)
     };
   }
 
@@ -305,114 +465,94 @@
       id: str(d.id, id('prog')),
       templateId: d.templateId || null,
       name: str(d.name, 'Program'),
-      category: str(d.category, 'general'),
+      type: PROGRAM_TYPES.indexOf(d.type) >= 0 ? d.type : 'custom',
       description: str(d.description, ''),
+      weeks: Math.max(1, num(d.weeks, 4)),
+      daysPerWeek: Math.max(0, num(d.daysPerWeek, 3)), // 0 = overlay (no scheduled days)
+      days: (Array.isArray(d.days) ? d.days : []).map(ProgramDay),
       ageBands: Array.isArray(d.ageBands) ? d.ageBands.map(String) : AGE_BANDS.slice(),
-      ageGateMin: d.ageGateMin == null ? null : num(d.ageGateMin, null), // hard min age (e.g. 15 for weighted balls)
-      weeks: num(d.weeks, 4),
-      sessionsPerWeek: num(d.sessionsPerWeek, 3),
-      checklist: Array.isArray(d.checklist) ? d.checklist.map(String) : [],
+      ageGateMin: d.ageGateMin == null ? null : num(d.ageGateMin, null),
       clinicianRequired: bool(d.clinicianRequired),
-      isTemplate: bool(d.isTemplate),
-      createdAt: str(d.createdAt, nowISO())
+      archived: bool(d.archived),
+      createdAt: str(d.createdAt, nowISO()),
+      updatedAt: str(d.updatedAt, nowISO())
     };
   }
 
   function ProgramAssignment(d) {
     d = d || {};
+    const dow = Array.isArray(d.daysOfWeek)
+      ? d.daysOfWeek.map(Number).filter(function (n) { return Number.isInteger(n) && n >= 0 && n <= 6; })
+      : null;
     return {
       id: str(d.id, id('pa')),
       playerId: str(d.playerId, ''),
       programId: str(d.programId, ''),
       startDate: str(d.startDate, CT.todayISO()),
+      daysOfWeek: dow && dow.length ? dow : null,  // 0=Sun..6=Sat; null = any day
       status: str(d.status, 'active'),   // active|completed|paused
       notes: str(d.notes, ''),
       createdAt: str(d.createdAt, nowISO())
     };
   }
 
-  function ProgramSession(d) {
-    d = d || {};
-    return {
-      id: str(d.id, id('ps')),
-      assignmentId: str(d.assignmentId, ''),
-      playerId: str(d.playerId, ''),
-      programId: str(d.programId, ''),
-      date: str(d.date, CT.todayISO()),
-      weekIndex: num(d.weekIndex, 0),
-      planned: d.planned == null ? true : bool(d.planned),
-      completed: bool(d.completed),
-      warmupDone: bool(d.warmupDone),
-      armCareDone: bool(d.armCareDone),
-      rpe: d.rpe == null ? null : num(d.rpe, null),
-      soreness: d.soreness == null ? null : num(d.soreness, null),
-      notes: str(d.notes, ''),
-      createdAt: str(d.createdAt, nowISO())
-    };
-  }
-
   // ---------------------------------------------------------------------------
-  // Drill / Lesson (coaching-session workflow) — NEW entities.
+  // SessionLog (v3) — replaces BOTH Lesson and ProgramSession. One record per
+  // logged coaching/program session. Program sessions are logged ON DEMAND
+  // (never pre-generated), so nothing goes stale.
   // ---------------------------------------------------------------------------
-  // Categories a Drill can belong to (drill library filter + grouping).
-  const DRILL_CATEGORIES = ['Hitting', 'Pitching', 'Fielding', 'Baserunning', 'Strength', 'Mobility'];
-
-  // A reusable, coach-managed drill. The DrillLibrary is just the `drills`
-  // collection. Drills are CLONED (by id reference) into a Lesson's drillIds.
-  function Drill(d) {
+  function SessionLog(d) {
     d = d || {};
-    const cat = DRILL_CATEGORIES.indexOf(d.category) >= 0 ? d.category : 'Hitting';
-    return {
-      id: str(d.id, id('drl')),
-      name: str(d.name, 'New Drill'),
-      category: cat,
-      defaultNotes: str(d.defaultNotes, ''),
-      createdAt: str(d.createdAt, nowISO()),
-      updatedAt: str(d.updatedAt, nowISO())
-    };
-  }
-
-  // A coaching session for one player on one date. `drillIds` is an ORDERED list
-  // of Drill ids (the session board's columns persist their order here).
-  // `notes` is the rich session note, carried by this STABLE lesson id — never a
-  // board position — so it follows the lesson regardless of drag-drop reordering.
-  // `quickStats` is a { metricKey: value } map of quick-logged numbers.
-  function Lesson(d) {
-    d = d || {};
-    const drillIds = Array.isArray(d.drillIds) ? d.drillIds.map(String) : [];
-    let quickStats = {};
-    if (d.quickStats && typeof d.quickStats === 'object') {
-      Object.keys(d.quickStats).forEach(function (k) {
-        const v = Number(d.quickStats[k]);
-        if (Number.isFinite(v)) quickStats[k] = v;
-      });
+    const itemChecks = {};
+    if (d.itemChecks && typeof d.itemChecks === 'object') {
+      Object.keys(d.itemChecks).forEach(function (k) { itemChecks[k] = !!d.itemChecks[k]; });
     }
     return {
-      id: str(d.id, id('les')),
+      id: str(d.id, id('sl')),
       playerId: str(d.playerId, ''),
       date: str(d.date, CT.todayISO()),
-      drillIds: drillIds,
+      assignmentId: d.assignmentId || null,
+      programDayRef: (d.programDayRef && typeof d.programDayRef === 'object')
+        ? { weekIndex: num(d.programDayRef.weekIndex, 0), dayIndex: num(d.programDayRef.dayIndex, 0) } : null,
+      itemChecks: itemChecks,                       // { programItemId: bool }
+      extraDrillIds: Array.isArray(d.extraDrillIds) ? d.extraDrillIds.map(String)
+        : (Array.isArray(d.drillIds) ? d.drillIds.map(String) : []),
       notes: str(d.notes, ''),
-      quickStats: quickStats,
+      rpe: d.rpe == null ? null : num(d.rpe, null),
+      throws: d.throws == null ? null : num(d.throws, null), // throw count -> workloadLog via sourceRef
       ratingDelta: d.ratingDelta == null ? null : num(d.ratingDelta, null),
       createdAt: str(d.createdAt, nowISO()),
       updatedAt: str(d.updatedAt, nowISO())
     };
   }
 
-  function Benchmark(d) {
+  // ---------------------------------------------------------------------------
+  // Drill (v3): lowercase category enum + richer metadata.
+  // ---------------------------------------------------------------------------
+  const DRILL_CATEGORIES = ['hitting', 'throwing', 'fielding', 'speed', 'strength'];
+  const DRILL_CATEGORY_LABELS = {
+    hitting: 'Hitting', throwing: 'Throwing', fielding: 'Fielding',
+    speed: 'Speed', strength: 'Strength'
+  };
+  // Old v2 categories -> v3 enum.
+  const DRILL_CATEGORY_MAP = {
+    Hitting: 'hitting', Pitching: 'throwing', Fielding: 'fielding',
+    Baserunning: 'speed', Strength: 'strength', Mobility: 'strength'
+  };
+
+  function Drill(d) {
     d = d || {};
+    let cat = String(d.category || '');
+    if (DRILL_CATEGORIES.indexOf(cat) < 0) cat = DRILL_CATEGORY_MAP[cat] || 'hitting';
     return {
-      id: str(d.id, id('bm')),
-      ageBand: str(d.ageBand, ''),
-      metricKey: str(d.metricKey, ''),
-      unit: str(d.unit, ''),
-      p10: d.p10 == null ? null : num(d.p10, null),
-      p25: d.p25 == null ? null : num(d.p25, null),
-      p50: d.p50 == null ? null : num(d.p50, null),
-      p75: d.p75 == null ? null : num(d.p75, null),
-      p90: d.p90 == null ? null : num(d.p90, null),
-      source: str(d.source, '')
+      id: str(d.id, id('drl')),
+      name: str(d.name, 'New Drill'),
+      category: cat,
+      description: str(d.description != null ? d.description : d.defaultNotes, ''),
+      videoUrl: d.videoUrl ? String(d.videoUrl) : null,
+      equipment: Array.isArray(d.equipment) ? d.equipment.map(String).filter(Boolean) : [],
+      createdAt: str(d.createdAt, nowISO()),
+      updatedAt: str(d.updatedAt, nowISO())
     };
   }
 
@@ -465,7 +605,7 @@
     if (m.range && (v < m.range[0] || v > m.range[1])) {
       errors.push(m.label + ' of ' + v + ' ' + m.unit + ' is outside the plausible range (' + m.range[0] + '–' + m.range[1] + ').');
     }
-    const band = player && (player.ageBand || ageBandFromBirthdate(player.birthdate));
+    const band = bandFor(player);
     if (m.youthNA && band && AGE_BANDS.indexOf(band) <= 2) {
       warnings.push(m.label + ' is generally N/A for youth — interpret with caution.');
     }
@@ -478,6 +618,8 @@
   window.CT.model = {
     AGE_BANDS: AGE_BANDS,
     LEVELS: LEVELS,
+    POSITIONS: POSITIONS,
+    POSITION_LABELS: POSITION_LABELS,
     INNINGS_PER_GAME: INNINGS_PER_GAME,
     HITTING_CONTEXTS: HITTING_CONTEXTS,
     PITCHING_CONTEXTS: PITCHING_CONTEXTS,
@@ -486,15 +628,26 @@
     DEVICES: DEVICES,
     CONFIDENCE: CONFIDENCE,
     DRILL_CATEGORIES: DRILL_CATEGORIES,
+    DRILL_CATEGORY_LABELS: DRILL_CATEGORY_LABELS,
+    DRILL_CATEGORY_MAP: DRILL_CATEGORY_MAP,
+    PROGRAM_TYPES: PROGRAM_TYPES,
     METRIC_CATALOG: METRIC_CATALOG,
     METRIC_BY_KEY: METRIC_BY_KEY,
+    ASSESS_MODULES: ASSESS_MODULES,
+    ASSESS_MODULE_BY_ID: ASSESS_MODULE_BY_ID,
     metric: metric,
     metricsByGroup: metricsByGroup,
+    moduleForMetric: moduleForMetric,
     ageFromBirthdate: ageFromBirthdate,
     ageBandFromAge: ageBandFromAge,
     ageBandFromBirthdate: ageBandFromBirthdate,
+    bandFor: bandFor,
     defaultLevelFromAge: defaultLevelFromAge,
     inningsPerGame: inningsPerGame,
+    normalizePosition: normalizePosition,
+    normalizePositions: normalizePositions,
+    isPitcher: isPitcher,
+    isCatcher: isCatcher,
     // factories
     Player: Player,
     AnthroReading: AnthroReading,
@@ -508,10 +661,8 @@
     DailyCheckIn: DailyCheckIn,
     Program: Program,
     ProgramAssignment: ProgramAssignment,
-    ProgramSession: ProgramSession,
+    SessionLog: SessionLog,
     Drill: Drill,
-    Lesson: Lesson,
-    Benchmark: Benchmark,
     Team: Team,
     Season: Season,
     // validation

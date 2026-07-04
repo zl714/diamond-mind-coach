@@ -3,29 +3,11 @@
 (function () {
   'use strict';
 
-  const STORAGE_KEY = 'coachTracker.v1';
-  const SCHEMA_VERSION = 1;
-
-  // Session focus areas (per spec).
-  const FOCUS_AREAS = ['Hitting', 'Pitching', 'Fielding', 'Baserunning'];
-
-  // Baseball positions for the player form.
-  const POSITIONS = [
-    'Pitcher', 'Catcher', 'First Base', 'Second Base', 'Third Base',
-    'Shortstop', 'Left Field', 'Center Field', 'Right Field',
-    'Utility', 'Designated Hitter'
-  ];
-
-  // Metric catalog. Each metric has a key, label, unit, and sensible numeric range.
-  // Coaches pick which metrics apply to a given session.
-  const METRICS = [
-    { key: 'skill', label: 'Skill rating', unit: '/10', min: 1, max: 10, step: 1 },
-    { key: 'exitVelo', label: 'Exit velocity', unit: 'mph', min: 20, max: 120, step: 0.5 },
-    { key: 'pitchVelo', label: 'Pitch velocity', unit: 'mph', min: 20, max: 110, step: 0.5 },
-    { key: 'sprint', label: '60-yard dash', unit: 'sec', min: 5, max: 12, step: 0.01 }
-  ];
-
-  const METRIC_BY_KEY = METRICS.reduce(function (acc, m) { acc[m.key] = m; return acc; }, {});
+  // NOTE (v3): the legacy v1 exports that used to live here (STORAGE_KEY
+  // 'coachTracker.v1', SCHEMA_VERSION 1, METRICS, METRIC_BY_KEY, POSITIONS,
+  // FOCUS_AREAS) were deleted — they shadowed the real CT.model catalog and
+  // nothing referenced them. Storage keys/versions live in store.js; the metric
+  // catalog and positions enum live in model.js.
 
   // ---- tiny utilities ----
   function uid(prefix) {
@@ -94,12 +76,6 @@
   }
 
   window.CT = Object.assign(window.CT || {}, {
-    STORAGE_KEY: STORAGE_KEY,
-    SCHEMA_VERSION: SCHEMA_VERSION,
-    FOCUS_AREAS: FOCUS_AREAS,
-    POSITIONS: POSITIONS,
-    METRICS: METRICS,
-    METRIC_BY_KEY: METRIC_BY_KEY,
     uid: uid,
     todayISO: todayISO,
     formatDate: formatDate,

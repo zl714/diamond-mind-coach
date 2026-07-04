@@ -1214,6 +1214,135 @@ a.onboard-step:hover { transform: translateY(-1px); border-color: var(--border);
 .onboard-step .onboard-go i, .onboard-step .onboard-go svg { width: 18px; height: 18px; }
 
 /* ============================================================
+   ASSESSMENT WIZARD (#/assess/new) — 3-step flow: step dots,
+   module-picker checkbox cards, entry sections + live previews.
+   ============================================================ */
+.wiz-dots { display: flex; gap: var(--sp-2); margin: calc(-1 * var(--sp-2)) 0 var(--sp-4); }
+.wiz-dot { width: 28px; height: 5px; border-radius: var(--r-pill); background: var(--track); }
+.wiz-dot.active { background: var(--accent-500); }
+.wiz-dot.done { background: var(--accent-300); }
+.wiz-wrap { max-width: 640px; }
+.wiz-band { font-size: var(--fs-data); margin: calc(-1 * var(--sp-2)) 0 var(--sp-3); }
+
+.mod-grid { display: flex; flex-direction: column; gap: var(--sp-2); }
+.mod-card {
+  display: flex; align-items: center; gap: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  padding: var(--sp-3) var(--sp-4);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.mod-card:hover { border-color: var(--accent-400); }
+.mod-card.checked { border-color: var(--accent-500); background: var(--accent-wash); }
+.mod-card.locked { opacity: 0.55; cursor: not-allowed; }
+.mod-card input { position: absolute; opacity: 0; pointer-events: none; }
+.mod-icon {
+  flex: 0 0 auto; width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-control);
+  background: var(--surface-3); color: var(--text-secondary);
+}
+.mod-card.checked .mod-icon { background: var(--accent-soft); color: var(--accent-700); }
+.mod-icon i, .mod-icon svg { width: 18px; height: 18px; }
+.mod-body { flex: 1 1 auto; min-width: 0; }
+.mod-title { display: block; color: var(--text-hi); font-weight: var(--fw-semibold); font-size: var(--fs-sm); }
+.mod-sub { display: block; color: var(--text-secondary); font-size: var(--fs-data); margin-top: 1px; }
+.mod-check { flex: 0 0 auto; color: var(--accent-700); visibility: hidden; display: inline-flex; }
+.mod-card.checked .mod-check { visibility: visible; }
+.mod-check i, .mod-check svg { width: 18px; height: 18px; }
+
+.wiz-section { border-top: 1px solid var(--divider); padding-top: var(--sp-4); margin-top: var(--sp-4); }
+.wiz-section:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.wiz-section-head { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.wiz-section-head h3 { margin: 0; font-size: var(--fs-sm); }
+.wiz-section-head i, .wiz-section-head svg { width: 16px; height: 16px; color: var(--accent-700); }
+.wiz-metric { margin-bottom: var(--sp-3); }
+.wiz-metric .field { margin-bottom: var(--sp-1); }
+.wiz-preview { min-height: 20px; font-size: var(--fs-data); display: flex; align-items: center; gap: var(--sp-2); }
+.wiz-preview .asmt-pct { flex: 1; max-width: 280px; margin-top: 0; }
+.wiz-preview-note { font-size: var(--fs-eyebrow); }
+
+/* ============================================================
+   ASSESSMENT SUMMARY / RECEIPT ROWS (.rcpt-*) — narrow white
+   card, hairline-divided metric rows, delta chips, percentile
+   capsules. Shared by session detail + player latest values.
+   ============================================================ */
+.rcpt {
+  max-width: 560px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-panel);
+  padding: var(--sp-6);
+  box-shadow: var(--shadow-card), inset 0 -1px 0 var(--rim-light);
+}
+.rcpt-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-3); flex-wrap: wrap; padding-bottom: var(--sp-4); border-bottom: 1px solid var(--border); }
+.rcpt-name { color: var(--text-hi); font-weight: var(--fw-semibold); font-size: var(--fs-lg); }
+.rcpt-sub { font-size: var(--fs-data); margin-top: 2px; }
+.rcpt-mods { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
+.rcpt-rows { display: flex; flex-direction: column; }
+.rcpt-row { padding: var(--sp-3) 0; border-bottom: 1px solid var(--divider); }
+.rcpt-row:last-child { border-bottom: 0; }
+.rcpt-main { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
+.rcpt-label { flex: 1 1 auto; color: var(--text-body); font-size: var(--fs-sm); font-weight: var(--fw-medium); min-width: 0; }
+.rcpt-ctx { display: block; font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); margin-top: 1px; }
+.rcpt-val { color: var(--text-hi); font-weight: var(--fw-semibold); font-size: var(--fs-md); font-family: var(--font-mono, var(--font)); white-space: nowrap; }
+.rcpt-unit { font-size: var(--fs-data); font-weight: var(--fw-regular); }
+.rcpt-delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  border: 1px solid; border-radius: var(--r-pill);
+  padding: 1px 8px; font-size: var(--fs-label); font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+.rcpt-delta.muted { border: 0; padding: 1px 0; font-weight: var(--fw-regular); }
+.rcpt-delta i, .rcpt-delta svg { width: 12px; height: 12px; }
+.rcpt-row .asmt-pct { margin-top: var(--sp-2); max-width: 320px; }
+.rcpt-trend { font-size: var(--fs-eyebrow); margin-top: var(--sp-1); }
+.rcpt-note { border-top: 1px solid var(--border); padding-top: var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-data); color: var(--text-body); white-space: pre-wrap; }
+.rcpt-note-k { display: block; font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--text-secondary); margin-bottom: 2px; }
+.rcpt-foot { border-top: 1px solid var(--border); padding-top: var(--sp-3); margin-top: var(--sp-4); font-size: var(--fs-eyebrow); }
+
+/* Position picker chips (player form, v3 enum positions).
+   NOTE: .pos-grid prefix keeps these ABOVE `.field label` in specificity —
+   the chip is a <label> inside .field, which would otherwise force display:block. */
+.pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--sp-2); }
+.pos-grid .pos-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  border: 1px solid var(--border); border-radius: var(--r-control);
+  background: var(--surface-2); color: var(--text-secondary);
+  margin-bottom: 0;
+  padding: var(--sp-2); cursor: pointer; text-align: center;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.pos-grid .pos-chip:hover { border-color: var(--accent-400); }
+.pos-grid .pos-chip.checked { border-color: var(--accent-500); background: var(--accent-wash); }
+.pos-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.pos-code { display: block; font-weight: var(--fw-bold); font-size: var(--fs-sm); color: var(--text-hi); font-variant-numeric: tabular-nums; }
+.pos-chip.checked .pos-code { color: var(--accent-700); }
+.pos-name { display: block; font-size: var(--fs-eyebrow); color: var(--text-secondary); }
+
+/* Assessment history rows (overview + per-player) */
+.asmt-hist { display: flex; flex-direction: column; gap: var(--sp-2); }
+.asmt-hist-row {
+  display: flex; align-items: center; gap: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+  padding: var(--sp-3) var(--sp-4);
+  box-shadow: var(--shadow-xs);
+  text-decoration: none; color: inherit;
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.asmt-hist-row:hover { border-color: var(--accent-400); transform: translateY(-1px); color: inherit; }
+.asmt-hist-main { flex: 1 1 auto; min-width: 0; }
+.asmt-hist-name { display: block; color: var(--text-hi); font-weight: var(--fw-semibold); font-size: var(--fs-sm); }
+.asmt-hist-sub { display: block; font-size: var(--fs-data); margin-top: 1px; }
+.asmt-hist-mods { display: flex; gap: var(--sp-1); flex-wrap: wrap; justify-content: flex-end; }
+.asmt-hist-row > i, .asmt-hist-row > svg { width: 16px; height: 16px; color: var(--text-muted); flex: 0 0 auto; }
+@media (max-width: 640px) { .asmt-hist-mods { display: none; } }
+
+/* ============================================================
    PRINT — parent-facing artifacts (assessment receipt et al.):
    white page, ink text, no app chrome.
    ============================================================ */
@@ -1224,4 +1353,7 @@ a.onboard-step:hover { transform: translateY(-1px); border-color: var(--border);
   .view { max-width: none; padding: 0; }
   .card, .stat, .dash-tile { box-shadow: none; border-color: #E2E8F0; }
   a { color: inherit; text-decoration: none; }
+  /* Receipt prints as the page: hide everything around it when present */
+  .back-link, .page-head .row, .rcpt ~ .row { display: none !important; }
+  .rcpt { box-shadow: none; border-color: #E2E8F0; max-width: none; }
 }

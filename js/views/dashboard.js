@@ -15,7 +15,7 @@
 
   const ASSESS_STALE_DAYS = 21;
 
-  function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
+  function isPitcher(p) { return model.isPitcher(p); }
 
   function latestCheckIn(playerId) {
     const rows = store.byPlayer('dailyCheckIns', playerId);
@@ -138,10 +138,10 @@
     players.forEach(function (p) { nameOf[p.id] = p.name; });
 
     players.forEach(function (p) {
-      store.lessonsForPlayer(p.id).forEach(function (l) {
-        const n = (l.drillIds || []).length;
+      store.sessionLogsForPlayer(p.id).forEach(function (l) {
+        const n = (l.extraDrillIds || []).length;
         events.push({ date: l.date, sort: l.date + '_2', dot: 'var(--accent-500)', pid: p.id,
-          title: p.name + ' — lesson', outcome: l.notes || (n + ' drill' + (n === 1 ? '' : 's') + ' completed') });
+          title: p.name + ' — session', outcome: l.notes || (n + ' drill' + (n === 1 ? '' : 's') + ' completed') });
       });
       store.byPlayer('assessmentSessions', p.id).forEach(function (a) {
         const rs = store.byPlayer('metricReadings', p.id).filter(function (r) { return r.assessmentSessionId === a.id && !r.voided; });
@@ -233,7 +233,7 @@
       '<div class="onboard-steps">' +
         onboardStep(1, hasPlayers, false, '#/players', 'Add a player',
           'Name, birthdate, and positions — age bands drive benchmarks and Pitch Smart limits.') +
-        onboardStep(2, hasAssessment, !hasPlayers, '#/assessment', 'Run a first assessment',
+        onboardStep(2, hasAssessment, !hasPlayers, '#/assess/new', 'Run a first assessment',
           'Capture exit velo, throwing velo, and speed to baseline every player.') +
         onboardStep(3, hasProgram, !hasPlayers, '#/sessions/programs', 'Assign a program',
           'Arm care, long toss, or strength — adherence shows up here automatically.') +
@@ -247,7 +247,7 @@
     // First-run: no players yet, or a fresh roster with no logged activity.
     const fresh = !players.length ||
       (!store.all('assessmentSessions').length && !store.all('programAssignments').length &&
-       !store.all('games').length && !store.all('lessons').length);
+       !store.all('games').length && !store.all('sessionLogs').length);
     if (fresh) {
       root.innerHTML = onboardingHtml(players);
       return;

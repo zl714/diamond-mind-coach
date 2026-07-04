@@ -76,9 +76,10 @@
       const c = rows[0]; // most recent counts
       if (CT.daysAgo(c.date) > CHECKIN_WINDOW_DAYS) return;
       if (c.armPain) {
+        const level = c.painLevel != null ? c.painLevel + '/10' : '';
         out.push(makeAlert({
           category: 'pain', severity: 'red', playerId: p.id, playerName: p.name, date: c.date,
-          title: 'Arm pain reported' + (c.painLocation ? ' (' + c.painLocation + ')' : ''),
+          title: 'Arm pain reported' + (level ? ' ' + level : '') + (c.painLocation ? ' (' + c.painLocation + ')' : ''),
           detail: 'Auto-escalated from daily check-in — shut down throwing and recommend a medical referral before return-to-throw.'
         }));
       } else if (Number(c.soreness) >= SORENESS_FLAG) {
@@ -168,30 +169,31 @@
     return out;
   }
 
+  // v3: sessions are never pre-generated — adherence compares the program's
+  // schedule-derived due count against actual sessionLogs (CT.programs helpers).
   function adherenceAlerts() {
     const out = [];
     const todayStr = CT.todayISO();
     const assignments = store.all('programAssignments');
     assignments.forEach(function (a) {
       if (a.status === 'paused' || a.status === 'completed') return;
-      const sessions = store.where('programSessions', 'assignmentId', a.id);
-      const past = sessions.filter(function (s) { return s.date < todayStr && s.planned !== false; });
-      if (past.length < ADHERENCE_MIN_SESSIONS) return;
-      const done = past.filter(function (s) { return s.completed; }).length;
-      const pct = done / past.length;
+      const prog = store.getById('programs', a.programId);
+      if (!prog) return;
+      const logs = store.where('sessionLogs', 'assignmentId', a.id);
+      const adh = CT.programs.adherenceFor(prog, a, logs, todayStr);
+      if (adh.due < ADHERENCE_MIN_SESSIONS) return;
+      const pct = adh.done / adh.due;
       if (pct >= ADHERENCE_YELLOW) return;
 
       const player = store.getPlayer(a.playerId);
       if (!player) return;
-      const prog = store.getById('programs', a.programId);
-      const progName = prog && prog.name ? prog.name : 'Program';
-      const lastPast = past.slice().sort(byDateDesc)[0];
+      const lastLog = logs.slice().sort(byDateDesc)[0];
       const sev = pct < ADHERENCE_RED ? 'red' : 'yellow';
       out.push(makeAlert({
         category: 'adherence', severity: sev, playerId: player.id, playerName: player.name,
-        date: lastPast ? lastPast.date : todayStr,
+        date: lastLog ? lastLog.date : todayStr,
         title: 'Low program adherence',
-        detail: progName + ': ' + done + '/' + past.length + ' planned sessions completed (' +
+        detail: (prog.name || 'Program') + ': ' + adh.done + '/' + adh.due + ' due sessions logged (' +
           Math.round(pct * 100) + '%). Check in on warm-up / arm-care follow-through.'
       }));
     });

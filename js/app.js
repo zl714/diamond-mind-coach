@@ -24,12 +24,12 @@
   const NAV_ICONS = {
     dashboard: 'layout-dashboard',
     players: 'users',
+    assess: 'gauge',
     sessions: 'clipboard-list',
     games: 'diamond',
     armsafety: 'shield',
     // secondary / hidden (kept for any stray icon paint)
     player: 'user-round',
-    assessment: 'gauge',
     alerts: 'bell'
   };
   function navIcon(id) { return NAV_ICONS[id] || 'circle'; }
@@ -86,6 +86,8 @@
       case 'drills': return '#/sessions/drills';
       case 'programs': return '#/sessions/programs';
       case 'season': return '#/games/season';
+      // Old assessment entry (#/assessment[/playerId]) -> new Assessments view.
+      case 'assessment': return '#/assess' + (param ? '/' + param : '');
       case 'dashboard':
         // Old profile deep link (#/dashboard/<playerId>) -> new #/player/<id>.
         if (param && CT.store.getPlayer(param)) return '#/player/' + param;

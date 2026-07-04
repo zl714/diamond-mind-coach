@@ -114,7 +114,7 @@
   function eligibility(template, player) {
     if (!template) return { eligible: false, reason: 'Unknown program.' };
     const age = player ? CT.model.ageFromBirthdate(player.birthdate) : null;
-    const band = player ? (player.ageBand || CT.model.ageBandFromBirthdate(player.birthdate)) : null;
+    const band = player ? CT.model.bandFor(player) : null;
     if (template.ageGateMin != null && age != null && age < template.ageGateMin) {
       return { eligible: false, reason: 'Hard age gate: requires age ' + template.ageGateMin + '+ (player is ' + age + ').' };
     }
@@ -127,30 +127,64 @@
     return { eligible: true, reason: 'Eligible.' };
   }
 
-  // Generate dated weekly ProgramSession stubs for an assignment (auto-schedule).
-  function generateSessions(program, assignment) {
-    const out = [];
-    const perWeek = Math.max(0, Number(program.sessionsPerWeek) || 0);
+  // v2 template category -> v3 Program.type.
+  const TYPE_MAP = {
+    throwing: 'throwing', 'arm-care': 'throwing', 'return-to-play': 'throwing',
+    hitting: 'hitting',
+    strength: 'strength', mobility: 'strength', speed: 'strength',
+    compliance: 'custom', general: 'custom'
+  };
+
+  // Convert a static template into a v3 Program shape (checklist -> step items,
+  // sessionsPerWeek -> daysPerWeek). Programs are only stored at assignment time.
+  function toProgram(template) {
+    if (!template) return null;
+    return {
+      templateId: template.templateId,
+      name: template.name,
+      type: TYPE_MAP[template.category] || 'custom',
+      description: template.description || '',
+      weeks: Math.max(1, Number(template.weeks) || 1),
+      daysPerWeek: Math.max(0, Number(template.sessionsPerWeek) || 0),
+      days: [{
+        weekIndex: 0, dayIndex: 0, title: 'Session',
+        items: (template.checklist || []).map(function (text) { return { kind: 'step', text: String(text) }; })
+      }],
+      ageBands: (template.ageBands || []).slice(),
+      ageGateMin: template.ageGateMin == null ? null : template.ageGateMin,
+      clinicianRequired: !!template.clinicianRequired,
+      archived: false
+    };
+  }
+
+  // Schedule math (v3: sessions are NEVER pre-generated — adherence compares the
+  // expected count from the program schedule to actual sessionLogs).
+  function daysBetween(startISO, endISO) {
+    const s = new Date(startISO + 'T00:00:00');
+    const e = new Date(endISO + 'T00:00:00');
+    return Math.floor((e - s) / 86400000);
+  }
+
+  // Sessions DUE for an assignment as of `asOf` (inclusive of the start day).
+  function expectedSessions(program, assignment, asOf) {
+    if (!program || !assignment) return 0;
+    const perWeek = Math.max(0, Number(program.daysPerWeek) || 0);
     const weeks = Math.max(1, Number(program.weeks) || 1);
-    if (perWeek === 0) return out; // e.g. compliance overlay has no scheduled sessions
-    const start = new Date((assignment.startDate || CT.todayISO()) + 'T00:00:00');
-    const gap = Math.max(1, Math.floor(7 / perWeek));
-    for (let w = 0; w < weeks; w++) {
-      for (let s = 0; s < perWeek; s++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + w * 7 + s * gap);
-        out.push(CT.model.ProgramSession({
-          assignmentId: assignment.id,
-          playerId: assignment.playerId,
-          programId: program.id,
-          date: d.toISOString().slice(0, 10),
-          weekIndex: w,
-          planned: true,
-          completed: false
-        }));
-      }
-    }
-    return out;
+    if (perWeek === 0) return 0; // overlay-style: no scheduled sessions
+    const elapsed = daysBetween(assignment.startDate || CT.todayISO(), asOf || CT.todayISO());
+    if (elapsed < 0) return 0;
+    const due = Math.ceil(((elapsed + 1) * perWeek) / 7);
+    return Math.min(weeks * perWeek, due);
+  }
+
+  // Adherence for one assignment: { done, due, pct|null }. `logs` = that
+  // assignment's sessionLogs (deduped per day so double-logging can't inflate).
+  function adherenceFor(program, assignment, logs, asOf) {
+    const due = expectedSessions(program, assignment, asOf);
+    const seen = {};
+    (logs || []).forEach(function (l) { seen[l.date] = true; });
+    const done = Math.min(Object.keys(seen).length, due || Object.keys(seen).length);
+    return { done: done, due: due, pct: due ? Math.round((done / due) * 100) : null };
   }
 
   window.CT.programs = {
@@ -158,6 +192,8 @@
     templates: templates,
     byTemplateId: byTemplateId,
     eligibility: eligibility,
-    generateSessions: generateSessions
+    toProgram: toProgram,
+    expectedSessions: expectedSessions,
+    adherenceFor: adherenceFor
   };
 })();
