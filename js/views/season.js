@@ -221,6 +221,10 @@
 
   // ----- build + render -----
   function build(root) {
+    // In-view rebuilds (sort/scope/qualifier changes) replace the DOM without a
+    // route() — destroy the previous chart first or instances pile up in the
+    // live registry with ResizeObservers on detached canvases.
+    try { CT.charts.destroyAll(); } catch (e) {}
     const players = store.getPlayers();
     ensureDefaults(players);
     const youth = isYouth(players);

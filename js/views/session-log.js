@@ -60,8 +60,9 @@
   function throwsReadout(player, dateISO, throwsN) {
     const v = pitchsmart.evaluate(player, store.byPlayer('workloadLogs', player.id), { asOf: dateISO });
     if (!v.cleared) {
+      const why = String(v.reasons[0] || 'Pitch Smart limit').replace(/\.\s*$/, '');
       return { blocked: true, v: v, html: '<span class="sl-ps-red"><i data-lucide="shield-alert"></i>NOT cleared to throw ' +
-        (dateISO === CT.todayISO() ? 'today' : 'on ' + esc(CT.formatDate(dateISO))) + ' — ' + esc(v.reasons[0] || 'Pitch Smart limit') + '. Save is blocked while throws &gt; 0.</span>' };
+        (dateISO === CT.todayISO() ? 'today' : 'on ' + esc(CT.formatDate(dateISO))) + ' — ' + esc(why) + '. Save is blocked while throws &gt; 0.</span>' };
     }
     const rem = v.remainingToday;
     if (throwsN != null && throwsN > rem) {

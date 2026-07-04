@@ -125,8 +125,8 @@
   // range: absolute sanity bounds; bandMax: per-age-band soft ceiling for plausibility.
   const METRIC_CATALOG = [
     // Hitting
-    { key: 'exitVeloMax', label: 'Exit Velo (max)', unit: 'mph', group: 'hitting', tier: 'core', contexts: HITTING_CONTEXTS, range: [20, 120], bandMax: { '9-10U': 70, '11-12U': 82, '13-14U': 92, '15-16U': 100, '17-18U': 110 } },
-    { key: 'exitVeloAvg', label: 'Exit Velo (avg)', unit: 'mph', group: 'hitting', tier: 'core', contexts: HITTING_CONTEXTS, range: [20, 115], bandMax: { '9-10U': 65, '11-12U': 76, '13-14U': 86, '15-16U': 94, '17-18U': 102 } },
+    { key: 'exitVeloMax', label: 'Max Exit Velo', unit: 'mph', group: 'hitting', tier: 'core', contexts: HITTING_CONTEXTS, range: [20, 120], bandMax: { '9-10U': 70, '11-12U': 82, '13-14U': 92, '15-16U': 100, '17-18U': 110 } },
+    { key: 'exitVeloAvg', label: 'Avg Exit Velo', unit: 'mph', group: 'hitting', tier: 'core', contexts: HITTING_CONTEXTS, range: [20, 115], bandMax: { '9-10U': 65, '11-12U': 76, '13-14U': 86, '15-16U': 94, '17-18U': 102 } },
     { key: 'launchAngle', label: 'Launch Angle', unit: 'deg', group: 'hitting', tier: 'core', contexts: HITTING_CONTEXTS, range: [-30, 60] },
     { key: 'batSpeed', label: 'Bat Speed', unit: 'mph', group: 'hitting', tier: 'core', contexts: HITTING_CONTEXTS, range: [25, 90], bandMax: { '9-10U': 50, '11-12U': 58, '13-14U': 66, '15-16U': 74, '17-18U': 82 } },
     { key: 'sweetSpotPct', label: 'Sweet-Spot %', unit: '%', group: 'hitting', tier: 'derived', contexts: HITTING_CONTEXTS, range: [0, 100] },
@@ -549,7 +549,9 @@
       name: str(d.name, 'New Drill'),
       category: cat,
       description: str(d.description != null ? d.description : d.defaultNotes, ''),
-      videoUrl: d.videoUrl ? String(d.videoUrl) : null,
+      // Only http(s) URLs survive the model boundary — imports can't smuggle
+      // javascript:/data: schemes into the drill-library href sink.
+      videoUrl: (d.videoUrl && /^https?:\/\//i.test(String(d.videoUrl))) ? String(d.videoUrl) : null,
       equipment: Array.isArray(d.equipment) ? d.equipment.map(String).filter(Boolean) : [],
       createdAt: str(d.createdAt, nowISO()),
       updatedAt: str(d.updatedAt, nowISO())

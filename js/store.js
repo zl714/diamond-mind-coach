@@ -111,15 +111,22 @@
     let raw = null;
     try { raw = localStorage.getItem(KEY); } catch (e) { raw = null; }
     if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (isValidState(parsed)) {
-          state = normalize(parsed);
-          return state;
-        }
-      } catch (e) {
-        console.warn('Diamond Mind: stored v3 data invalid — booting empty.');
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      if (parsed && isValidState(parsed)) {
+        state = normalize(parsed);
+        return state;
       }
+      // Corrupt/invalid v3 blob (interrupted write, quota, ...): stash the raw
+      // bytes BEFORE persist() overwrites them so the data stays recoverable,
+      // and boot empty rather than re-migrating the old v2 snapshot OVER the
+      // (newer) v3 work the corrupt blob represents.
+      try { localStorage.setItem(KEY + '.corrupt', raw); } catch (e) {}
+      console.warn('Diamond Mind: stored v3 data invalid — raw blob stashed at ' +
+        KEY + '.corrupt; booting empty.');
+      state = emptyState();
+      persist();
+      return state;
     }
     // 2) No v3 — migrate a real (non-demo) coachTracker.v2 blob once.
     if (CT.migrate) {

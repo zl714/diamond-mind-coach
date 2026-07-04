@@ -19,7 +19,7 @@
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    CT.ui.toast('Exported ' + (payload.players ? payload.players.length : 0) + ' player(s) + all data');
+    CT.ui.toast('Exported ' + CT.plural(payload.players ? payload.players.length : 0, 'player') + ' + all data');
   }
 
   // Human labels for the count-confirm summary (only non-empty collections shown).
@@ -88,7 +88,7 @@
               try {
                 CT.store.importAll(prepared.data);
                 close();
-                CT.ui.toast('Imported ' + (prepared.data.players ? prepared.data.players.length : 0) + ' player(s)');
+                CT.ui.toast('Imported ' + CT.plural(prepared.data.players ? prepared.data.players.length : 0, 'player'));
                 if (typeof onDone === 'function') onDone();
               } catch (err) {
                 CT.ui.toast('Import failed: ' + (err && err.message ? err.message : 'invalid file'));

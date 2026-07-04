@@ -75,7 +75,7 @@
     if (v.status === 'red') {
       head = 'NOT CLEARED TO PITCH';
       sub = v.daysUntilEligible > 0
-        ? 'Resting — eligible in ' + v.daysUntilEligible + ' day(s).'
+        ? 'Resting — eligible in ' + CT.plural(v.daysUntilEligible, 'day') + '.'
         : (v.remainingToday <= 0 ? 'Daily pitch limit reached.' : 'Workload rule triggered.');
     } else if (v.status === 'yellow') {
       head = 'CLEARED — WITH CAUTION';
@@ -364,7 +364,7 @@
 
     if (flagged.length) {
       html += '<div style="margin-top:var(--sp-4);">' +
-        referralBlock(flagged.length + ' active pain flag(s). Per youth-safety protocol: stop throwing and refer to a sports-medicine clinician. See Alerts for the full list.') +
+        referralBlock(CT.plural(flagged.length, 'active pain flag') + '. Per youth-safety protocol: stop throwing and refer to a sports-medicine clinician. See Alerts for the full list.') +
         '</div>';
     }
 
@@ -444,7 +444,7 @@
 
     const subtitle = focused
       ? 'Pitch Smart console — ' + focused.name
-      : players.length + ' arm(s) monitored · MLB/USA Baseball Pitch Smart';
+      : CT.plural(players.length, 'arm') + ' monitored · MLB/USA Baseball Pitch Smart';
 
     let html = ui.pageHead('Arm Safety — Cleared to Pitch?', subtitle, checkinBtn);
     if (focused) html += '<a class="back-link" href="#/armsafety"><i data-lucide="arrow-left"></i>All arms</a>';

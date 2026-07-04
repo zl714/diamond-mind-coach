@@ -124,6 +124,9 @@
     buildNav();
     refreshAlertsBell();
     closeAlertsPanel();
+    // An open modal must not survive navigation (it would overlay the new
+    // view and leak its document-level Escape listener).
+    try { CT.ui.closeModal(); } catch (e) {}
 
     if (!view) {
       root.innerHTML = CT.ui.emptyState('hammer', 'No views registered yet',

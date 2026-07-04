@@ -150,6 +150,8 @@
     const sum = round1(store.sessionLogsForPlayer(player.id).reduce(function (s, l) {
       return s + (l.ratingDelta || 0);
     }, 0));
+    // A zero delta reads like a broken placeholder at hero size — hide it.
+    if (sum === 0) return '';
     const dp = deltaParts(sum, false, false);
     return '<span class="dm-prof-delta num" style="color:' + dp.color + ';background:' + dp.bg + ';">' +
       '<i data-lucide="' + dp.glyph + '"></i>' + dp.sign + dp.mag + ' dev</span>';
@@ -310,7 +312,13 @@
       if (bench && bench.p50 != null) {
         ds.push({ label: 'Age-band median', data: readings.map(function () { return bench.p50; }), color: charts.THEME.median, dash: true, fill: false });
       }
-      charts.line(cv, { labels: readings.map(function (r) { return CT.formatDate(r.date); }), datasets: ds });
+      charts.line(cv, {
+        labels: readings.map(function (r) { return CT.formatDate(r.date); }),
+        datasets: ds,
+        // y-grace keeps the dashed median visible inside the plot instead of
+        // pinned/clipped on the axis floor when it sits at the range edge.
+        options: (bench && bench.p50 != null) ? { scales: { y: { grace: '15%' } } } : {}
+      });
     });
 
     if (bench) {
@@ -444,9 +452,10 @@
         html = ui.emptyState('bar-chart-3', 'No ' + key + ' data yet',
           'Log ' + key + ' metrics in the Assessment view to populate this player\'s dashboard.');
       } else {
+        // Provenance (SOURCE_NOTE) lives once on the Tool-grades card above —
+        // repeating the same sentence here read as a copy/paste bug.
         html = '<div class="dash-note" style="margin-bottom:var(--sp-3);">' +
-          'Numbers are framed as <strong>trend vs. self</strong>, not pass/fail. ' +
-          esc(benchmarks.SOURCE_NOTE) + '</div>' +
+          'Numbers are framed as <strong>trend vs. self</strong>, not pass/fail.</div>' +
           '<div class="dash-metric-grid">' + cards.join('') + '</div>';
       }
     }

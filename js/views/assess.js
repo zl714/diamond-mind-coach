@@ -616,7 +616,7 @@
     root.innerHTML =
       '<a class="back-link" href="#/assess"><i data-lucide="chevron-left"></i>All assessments</a>' +
       ui.pageHead('Assessments — ' + player.name,
-        (model.bandFor(player) || '—') + (age != null ? ' · ' + age + ' yrs' : '') + ' · ' + sessions.length + ' session(s)',
+        (model.bandFor(player) || '—') + (age != null ? ' · ' + age + ' yrs' : '') + ' · ' + CT.plural(sessions.length, 'session'),
         '<a class="btn btn-primary" href="#/assess/new/' + esc(player.id) + '"><i data-lucide="clipboard-plus"></i>New assessment</a>') +
       ui.card({ title: 'Latest values', subtitle: 'Newest reading per metric', body: latestValuesBody(player) }) +
       '<h3 style="margin:1.25rem 0 .6rem;">Session history</h3>' +
@@ -637,7 +637,7 @@
     const readingCount = store.all('metricReadings').filter(function (r) { return !r.voided; }).length;
     const assessed = players.filter(function (p) { return store.byPlayer('assessmentSessions', p.id).length > 0; }).length;
 
-    let html = ui.pageHead('Assessments', sessions.length + ' session(s) · ' + readingCount + ' reading(s)',
+    let html = ui.pageHead('Assessments', CT.plural(sessions.length, 'session') + ' · ' + CT.plural(readingCount, 'reading'),
       '<a class="btn btn-primary" href="#/assess/new"><i data-lucide="clipboard-plus"></i>New assessment</a>');
 
     html += '<div class="stats">' +
@@ -674,9 +674,10 @@
     const param = ctx && ctx.param;
     if (param && param.split('/')[0] === 'new') {
       const pid = param.split('/')[1] || null;
-      // Fresh wizard when arriving (or when a preselected player differs).
-      if (!wiz || (pid && wiz.playerId !== pid && wiz.step === 1)) wiz = newWiz(pid);
-      if (pid && wiz && wiz.step === 1) wiz.playerId = store.getPlayer(pid) ? pid : wiz.playerId;
+      // Fresh wizard when arriving new, or whenever a preselected player
+      // differs from an in-progress wizard — never resume player A's stale
+      // step-2/3 wizard from player B's "New assessment" link (mis-attribution).
+      if (!wiz || (pid && wiz.playerId !== pid)) wiz = newWiz(pid);
       renderWizard(root);
       return;
     }

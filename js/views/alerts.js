@@ -109,8 +109,8 @@
           category: 'pitchsmart', severity: 'red', playerId: p.id, playerName: p.name, date: lastDate,
           title: 'Insufficient rest — not cleared to pitch',
           detail: 'Threw ' + v.lastOuting.pitches + ' pitches on ' + CT.formatDate(v.lastOuting.date) +
-            ' (' + v.ageBand + '): requires ' + v.lastOuting.restNeeded + ' day(s) rest. Eligible in ' +
-            v.daysUntilEligible + ' day(s).'
+            ' (' + v.ageBand + '): requires ' + CT.plural(v.lastOuting.restNeeded, 'day') + ' rest. Eligible in ' +
+            CT.plural(v.daysUntilEligible, 'day') + '.'
         }));
       }
 
@@ -250,10 +250,10 @@
     let tone, icon, status, sub;
     if (red > 0) {
       tone = 'seam'; icon = 'alert-octagon'; status = 'Action needed';
-      sub = red + ' critical flag(s) need a coach decision now.';
+      sub = CT.plural(red, 'critical flag') + (red === 1 ? ' needs' : ' need') + ' a coach decision now.';
     } else if (yellow > 0) {
       tone = 'yellow'; icon = 'alert-triangle'; status = 'Monitor';
-      sub = yellow + ' caution flag(s) — watch before loading up.';
+      sub = CT.plural(yellow, 'caution flag') + ' — watch before loading up.';
     } else {
       tone = 'accent'; icon = 'shield-check'; status = 'All clear';
       sub = 'No active pain, Pitch Smart, ACWR, or adherence flags.';
@@ -276,7 +276,7 @@
 
     let html = '<a class="back-link" href="#/dashboard"><i data-lucide="chevron-left"></i>Back to dashboard</a>' +
       ui.pageHead('Alerts',
-        alerts.length + ' active flag(s) · ' + red + ' critical · ' + yellow + ' caution');
+        CT.plural(alerts.length, 'active flag') + ' · ' + red + ' critical · ' + yellow + ' caution');
 
     html += heroBanner(red, yellow);
 

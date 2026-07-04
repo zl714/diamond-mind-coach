@@ -260,8 +260,18 @@
       templateId: draft.templateId || null, archived: !!draft.archived
     };
     let saved;
-    if (isNew) saved = store.insert('programs', payload);
-    else saved = store.update('programs', state.key, payload);
+    if (isNew) {
+      saved = store.insert('programs', payload);
+    } else {
+      saved = store.update('programs', state.key, payload);
+      if (!saved) {
+        // Deleted concurrently (e.g. second tab): don't toast success then throw.
+        ui.toast('Could not save — this program no longer exists.');
+        resetDraft();
+        navigate('#/programs');
+        return;
+      }
+    }
     resetDraft();
     ui.toast('Program saved');
     navigate('#/programs/' + saved.id);

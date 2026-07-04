@@ -34,12 +34,25 @@
     return Math.floor(inches / 12) + "'" + Math.round(inches % 12) + '"';
   }
 
-  // Pitch-Smart clearance as a color+glyph+text pill (never color alone). Returns a
-  // muted dash for non-pitchers with no workload.
+  // Recent pain flag (same recency rule as the dashboard hero roll-up) so the
+  // roster never contradicts the "players need attention" summary at a glance.
+  function painPill(player) {
+    const rows = store.byPlayer('dailyCheckIns', player.id);
+    if (!rows.length) return '';
+    const c = rows.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).slice(-1)[0];
+    if (!c || !c.armPain || CT.daysAgo(c.date) > ASSESS_STALE_DAYS) return '';
+    const label = 'Pain' + (c.painLevel != null ? ' ' + c.painLevel + '/10' : '');
+    return '<span class="badge pcard-pill" style="' + ui.toneStyle('red') + '">' +
+      '<i data-lucide="alert-octagon"></i>' + esc(label) + '</span>';
+  }
+
+  // Pitch-Smart clearance as a color+glyph+text pill (never color alone).
+  // Non-pitchers with no workload get nothing (no lone dash) — the status
+  // cluster then holds only pills that mean something (pain / assess due).
   function clearancePill(player) {
     const logs = store.byPlayer('workloadLogs', player.id);
     if (!isPitcher(player) && !logs.length) {
-      return '<span class="pcard-nonpitcher">—</span>';
+      return '';
     }
     const v = CT.pitchsmart.evaluate(player, logs);
     let tone, icon, label;
@@ -87,7 +100,7 @@
           (whisper ? '<div class="pcard-whisper num">' + esc(whisper) + '</div>' : '') +
         '</div>' +
       '</div>' +
-      '<div class="pcard-status">' + clearancePill(p) + assessBadge(p) + '</div>' +
+      '<div class="pcard-status">' + painPill(p) + clearancePill(p) + assessBadge(p) + '</div>' +
     '</a>';
   }
 
@@ -210,6 +223,9 @@
       root.innerHTML = html;
       const ae = root.querySelector('#add-empty');
       if (ae) ae.addEventListener('click', function () { openForm(null); });
+      // The page-head "Add player" button must work on the first-run screen too.
+      const ah = root.querySelector('#add-player');
+      if (ah) ah.addEventListener('click', function () { openForm(null); });
       return;
     }
 

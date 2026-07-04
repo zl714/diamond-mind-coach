@@ -114,7 +114,7 @@
         const daysOfWeek = Object.keys(picked).filter(function (k) { return picked[k]; }).map(Number);
         const dpw = Math.max(1, program.daysPerWeek || 1);
         if (daysOfWeek.length && daysOfWeek.length !== dpw) {
-          ui.toast('Heads up: ' + daysOfWeek.length + ' training day(s) picked for a ' + dpw + '-day/week program.');
+          ui.toast('Heads up: ' + CT.plural(daysOfWeek.length, 'training day') + ' picked for a ' + dpw + '-day/week program.');
         }
         let assigned = 0;
         ids.forEach(function (pid) {
@@ -127,7 +127,7 @@
           assigned++;
         });
         close();
-        ui.toast(assigned ? 'Assigned to ' + assigned + ' player(s)' : 'No eligible players assigned');
+        ui.toast(assigned ? 'Assigned to ' + CT.plural(assigned, 'player') : 'No eligible players assigned');
         CT.router.navigate('#/programs');
       });
     });
@@ -214,8 +214,9 @@
         '</div>';
     }
 
-    // Programs.
-    html += '<h2 style="margin-bottom:var(--sp-3);">Programs</h2>';
+    // Program library ("Programs" already reads as the page H1 + active tab —
+    // a third identical heading in a row looked broken).
+    html += '<h2 style="margin-bottom:var(--sp-3);">Program library</h2>';
     if (!progs.length) {
       html += ui.emptyState('clipboard-list', 'No programs built yet',
         'Build your first program — start from a template (arm care, long toss, hitting…) or from scratch.',
@@ -278,7 +279,7 @@
         if (!p) return;
         const n = assignmentsFor(p.id).length;
         ui.confirmDialog('Delete program',
-          'Delete "' + p.name + '"' + (n ? ' and its ' + n + ' active assignment(s)' : '') + '? Logged sessions stay in player history.',
+          'Delete "' + p.name + '"' + (n ? ' and its ' + CT.plural(n, 'active assignment') : '') + '? Logged sessions stay in player history.',
           'Delete', function () {
             store.where('programAssignments', 'programId', p.id).forEach(function (a) { store.remove('programAssignments', a.id); });
             store.remove('programs', p.id);
@@ -418,7 +419,8 @@
     const tab = param === 'drills' ? 'drills' : 'programs';
     const drills = store.drillLibrary().length;
     const active = activeAssignments().length;
-    const subtitle = store.all('programs').length + ' program(s) · ' + active + ' active assignment(s) · ' + drills + ' drill(s)';
+    const subtitle = CT.plural(store.all('programs').length, 'program') + ' · ' +
+      CT.plural(active, 'active assignment') + ' · ' + CT.plural(drills, 'drill');
 
     const tabbar = '<div class="tabbar" role="tablist">' +
       '<button class="tabbar-item' + (tab === 'programs' ? ' active' : '') + '" data-tab="programs">Programs</button>' +

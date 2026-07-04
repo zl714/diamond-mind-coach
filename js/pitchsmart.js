@@ -142,11 +142,14 @@
     const restNeeded = lastDate ? restRequired(band, lastPitches) : 0;
     const daysSinceLast = lastDate ? dayDiff(asOf, lastDate) : Infinity;
 
-    // Rest clearance.
+    // Rest clearance. Required rest days start the DAY AFTER the outing —
+    // same-day throwing is governed only by the daily-max remaining below, so
+    // a coach can log a legitimate second same-day session under the max.
     let daysUntilEligible = 0;
-    if (lastDate && daysSinceLast < restNeeded) {
+    if (lastDate && daysSinceLast >= 1 && daysSinceLast < restNeeded) {
       daysUntilEligible = restNeeded - daysSinceLast;
-      reasons.push('Needs ' + restNeeded + ' day(s) rest after ' + lastPitches + ' pitches on ' + lastDate + '.');
+      reasons.push('Needs ' + restNeeded + ' day' + (restNeeded === 1 ? '' : 's') + ' rest after ' +
+        lastPitches + ' pitches on ' + CT.formatDate(lastDate) + '.');
     }
 
     // Today's remaining allowance.

@@ -336,7 +336,7 @@
       logged++;
     });
     store.update('games', game.id, { final: true });
-    ui.toast(logged ? ('Finalized — logged ' + logged + ' outing(s) to Pitch Smart') : 'Game finalized');
+    ui.toast(logged ? ('Finalized — logged ' + CT.plural(logged, 'outing') + ' to Pitch Smart') : 'Game finalized');
     CT.router.route();
   }
 

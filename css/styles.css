@@ -411,8 +411,14 @@ small, .muted { color: var(--text-secondary); }
 .btn-primary:active { background: var(--accent-800); border-color: var(--accent-800); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--text-secondary); }
 .btn-ghost:hover { background: rgba(15,23,42,0.05); color: var(--text-strong); border-color: transparent; }
-.btn-danger { color: #fff; background: var(--down); border-color: var(--down); }
-.btn-danger:hover { background: #B91C1C; border-color: #B91C1C; }
+/* Destructive buttons rest as a quiet outline — filled red is reserved for
+   safety states (NOT CLEARED, pain flags) and final confirm actions. */
+.btn-danger { color: var(--down); background: transparent; border-color: #FECDCA; }
+.btn-danger:hover { background: var(--down-soft); border-color: var(--down); color: #B91C1C; }
+/* Inside a confirm/edit modal the destructive action is the deliberate final
+   step — keep it filled so intent is unmistakable. */
+.modal-actions .btn-danger { color: #fff; background: var(--down); border-color: var(--down); }
+.modal-actions .btn-danger:hover { background: #B91C1C; border-color: #B91C1C; color: #fff; }
 .btn-sm { padding: var(--sp-1) var(--sp-3); min-height: 32px; font-size: var(--fs-data); }
 .btn-block { width: 100%; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
@@ -435,6 +441,9 @@ small, .muted { color: var(--text-secondary); }
 .grid { display: grid; gap: var(--sp-4); }
 .grid-players { grid-template-columns: 1fr; }
 .grid-cards { display: grid; gap: var(--sp-4); grid-template-columns: 1fr; }
+/* Grid items may hold wide min-content (KPI grids, charts) — let them shrink
+   instead of blowing the multi-column row out of the view container. */
+.grid-cards > * { min-width: 0; }
 
 /* ============================================================
    STAT / KPI TILES
@@ -451,8 +460,8 @@ small, .muted { color: var(--text-secondary); }
 .stat .label { color: var(--text-muted); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); margin-top: var(--sp-2); }
 
 .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
-.kpi { background: var(--surface-3); border: 1px solid var(--border-subtle); border-radius: var(--r-card); padding: var(--sp-3); }
-.kpi .k { color: var(--text-muted); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); }
+.kpi { background: var(--surface-3); border: 1px solid var(--border-subtle); border-radius: var(--r-card); padding: var(--sp-3); min-width: 0; overflow: hidden; }
+.kpi .k { color: var(--text-muted); font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); overflow-wrap: anywhere; }
 .kpi .v { color: var(--text-hi); font-size: var(--fs-h4); font-weight: var(--fw-semibold); margin-top: var(--sp-1); }
 .kv-row { display: flex; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--divider); }
 .kv-row .k { color: var(--text-secondary); }
@@ -513,6 +522,8 @@ small, .muted { color: var(--text-secondary); }
   min-height: 40px;
 }
 .input::placeholder, .textarea::placeholder { color: var(--text-muted); }
+/* Native checks/radios tinted to the brand cyan (kills the UA default blue). */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-600); }
 .input:focus, .select:focus, .textarea:focus {
   outline: none;
   border-color: var(--accent-500);
@@ -702,7 +713,9 @@ small, .muted { color: var(--text-secondary); }
 @media (min-width: 640px) {
   .grid-players { grid-template-columns: 1fr 1fr; }
   .grid-cards { grid-template-columns: 1fr 1fr; }
-  .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+  /* auto-fit: KPI tiles pack 4-up on wide cards but wrap to 2x2 inside a
+     narrow 3-up grid card instead of squeezing labels / overflowing the page. */
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
 }
 @media (min-width: 1024px) {
   .grid-players { grid-template-columns: 1fr 1fr 1fr; }
@@ -763,7 +776,9 @@ small, .muted { color: var(--text-secondary); }
   .modal::before { display: none; }
 }
 @media (max-width: 479px) {
-  .stats { grid-template-columns: 1fr; }
+  /* 2-up stat tiles on phones — a single column pushes real content ~3
+     screens below the fold on stat-heavy views (Programs/Alerts/Assess). */
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* Cards relax to 20px padding on small phones so 2-up grids never overflow. */
   .card, .stat, .dash-tile { padding: var(--sp-5); }
@@ -802,7 +817,7 @@ small, .muted { color: var(--text-secondary); }
 .dash-tab:hover { color: var(--text-strong); }
 .dash-tab.active { color: var(--text-hi); border-bottom-color: var(--accent-500); }
 .dash-metric-grid { display: grid; gap: var(--sp-4); grid-template-columns: 1fr; }
-.dash-note { color: var(--text-muted); font-size: var(--fs-label); }
+.dash-note { color: var(--text-secondary); font-size: var(--fs-label); }
 @media (min-width: 900px) { .dash-metric-grid { grid-template-columns: 1fr 1fr; } }
 
 /* ---- Alerts view ---- */
@@ -838,7 +853,7 @@ small, .muted { color: var(--text-secondary); }
 .as-reasons li::before { content: '\2022'; position: absolute; left: 0; color: var(--accent-700); font-weight: var(--fw-bold); }
 .as-cap-bar { height: 8px; border-radius: var(--r-pill); background: var(--track); overflow: hidden; margin-top: var(--sp-2); }
 .as-cap-bar > span { display: block; height: 100%; border-radius: var(--r-pill); }
-.as-note { color: var(--text-muted); font-size: var(--fs-label); margin: var(--sp-2) 0 var(--sp-4); }
+.as-note { color: var(--text-secondary); font-size: var(--fs-label); margin: var(--sp-4) 0 var(--sp-4); }
 
 /* ---- Assessment view (.asmt-*) ---- */
 .asmt-row { background: var(--surface-3); border: 1px solid var(--border-subtle); border-radius: var(--r-card); padding: var(--sp-3) var(--sp-3) var(--sp-2); margin-bottom: var(--sp-3); }

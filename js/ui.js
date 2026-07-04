@@ -28,7 +28,13 @@
   // ---------------------------------------------------------------------------
   // Modal
   // ---------------------------------------------------------------------------
+  // Track the open modal's close() so (a) opening a second modal tears the
+  // first one down properly (its document keydown listener included) and
+  // (b) closeModal()/route() can dismiss whatever is open without leaks.
+  let activeClose = null;
+
   function openModal(title, contentHtml, onMount) {
+    if (activeClose) { try { activeClose(); } catch (e) {} }
     const root = document.getElementById('modal-root');
     root.innerHTML = '';
     const overlay = document.createElement('div');
@@ -46,16 +52,25 @@
     overlay.appendChild(modal);
     root.appendChild(overlay);
 
-    function close() { root.innerHTML = ''; document.removeEventListener('keydown', onKey); }
+    function close() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      document.removeEventListener('keydown', onKey);
+      if (activeClose === close) activeClose = null;
+    }
     function onKey(e) { if (e.key === 'Escape') close(); }
     modal.querySelector('.modal-close').addEventListener('click', close);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
     document.addEventListener('keydown', onKey);
+    activeClose = close;
     if (typeof onMount === 'function') onMount(modal, close);
     return { close: close, modal: modal };
   }
 
-  function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+  function closeModal() {
+    if (activeClose) { try { activeClose(); } catch (e) {} activeClose = null; }
+    const root = document.getElementById('modal-root');
+    if (root) root.innerHTML = '';
+  }
 
   function confirmDialog(title, message, confirmLabel, onConfirm) {
     openModal(title,

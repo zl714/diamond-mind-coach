@@ -69,6 +69,13 @@
       .join('');
   }
 
+  // plural(3, 'session') -> '3 sessions'; plural(1, 'day') -> '1 day'.
+  // Optional third arg supplies an irregular plural form.
+  function plural(n, singular, pluralWord) {
+    const num = Number(n) || 0;
+    return num + ' ' + (num === 1 ? singular : (pluralWord || singular + 's'));
+  }
+
   function clampNumber(val, min, max) {
     const n = Number(val);
     if (Number.isNaN(n)) return null;
@@ -83,6 +90,7 @@
     relativeDate: relativeDate,
     escapeHtml: escapeHtml,
     initials: initials,
+    plural: plural,
     clampNumber: clampNumber
   });
 })();

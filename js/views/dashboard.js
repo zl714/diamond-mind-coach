@@ -84,7 +84,7 @@
       tone = critical ? 'seam' : 'warn';
       icon = critical ? 'alert-octagon' : 'alert-triangle';
       const n = Math.max(r.attentionCount, 1);
-      status = n + ' player' + (n === 1 ? '' : 's') + ' need attention';
+      status = CT.plural(n, 'player') + (n === 1 ? ' needs' : ' need') + ' attention';
       sub = parts.length ? parts.join(' · ') : (alerts.length + ' active flag' + (alerts.length === 1 ? '' : 's'));
     }
 
