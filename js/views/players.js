@@ -193,17 +193,126 @@
     });
   }
 
+  // ----- guarded cascade-delete (v4): inventory + export + typed guard + undo -----
+  // Human labels for the cascade inventory, in the order a coach thinks in.
+  const DELETE_INV = [
+    ['assessmentSessions', 'Assessments'],
+    ['metricReadings', 'Metric readings'],
+    ['sessionLogs', 'Lessons & sessions'],
+    ['workloadLogs', 'Workload logs'],
+    ['dailyCheckIns', 'Check-ins'],
+    ['anthroReadings', 'Growth readings'],
+    ['programAssignments', 'Program assignments'],
+    ['battingStatLines', 'Batting lines'],
+    ['pitchingAppearances', 'Pitching outings'],
+    ['fieldingStatLines', 'Fielding lines']
+  ];
+
+  function deleteInventoryHtml(snapshot) {
+    const rows = DELETE_INV.map(function (pair) {
+      const n = (snapshot.removed[pair[0]] || []).length;
+      if (!n) return '';
+      return '<div class="kv-row"><span class="k">' + esc(pair[1]) + '</span><span class="v num">' + n + '</span></div>';
+    }).join('');
+    return rows || '<p class="muted" style="margin:0;">No logged data yet — just the player record.</p>';
+  }
+
+  // Undo toast + navigate back to the restored profile.
+  function offerUndo(playerName) {
+    ui.toast(playerName + ' deleted — ', {
+      label: 'UNDO',
+      duration: 8000,
+      onClick: function () {
+        const restored = store.restoreTrash();
+        if (restored) {
+          ui.toast('Restored ' + restored.name);
+          CT.router.navigate('#/player/' + restored.id);
+        } else {
+          ui.toast('Undo window expired.');
+        }
+      }
+    });
+  }
+
   // Cascade-delete confirm. onDone lets the profile route back to the list.
+  // v4: guarded modal — live cascade counts, export-first escape hatch, a
+  // type-the-name guard, and a 10-minute undo window (store trash slot).
   function confirmDelete(player, onDone) {
     if (!player) return;
-    ui.confirmDialog('Delete player',
-      'Delete ' + player.name + ' and all their assessments, stats, workload, and programs? This cannot be undone.',
-      'Delete', function () {
-        store.deletePlayerCascade(player.id);
-        ui.toast('Player deleted');
+    const snapshot = store.playerSnapshot(player.id);
+    if (!snapshot) return;
+
+    const html =
+      '<p style="margin-top:0;">Deleting <strong>' + esc(player.name) + '</strong> removes:</p>' +
+      '<div class="del-inv">' + deleteInventoryHtml(snapshot) + '</div>' +
+      '<p class="muted" style="font-size:var(--fs-data);">Games stay (team records); only this player’s stat lines are removed. Alerts recompute automatically. You’ll have a 10-minute undo window.</p>' +
+      '<div class="row" style="margin-bottom:var(--sp-4);">' +
+        '<button class="btn btn-sm" data-act="export"><i data-lucide="download"></i>Download this player’s data (JSON)</button>' +
+      '</div>' +
+      ui.formField({ type: 'text', name: 'confirm-name', label: 'Type the player’s name to confirm', placeholder: player.name }) +
+      '<div class="modal-actions">' +
+        '<button class="btn btn-ghost" data-act="cancel">Cancel</button>' +
+        '<button class="btn btn-danger" data-act="ok" disabled><i data-lucide="trash-2"></i>Delete player</button>' +
+      '</div>';
+
+    ui.openModal('Delete player', html, function (modal, close) {
+      const okBtn = modal.querySelector('[data-act="ok"]');
+      const nameEl = modal.querySelector('[name="confirm-name"]');
+      const want = String(player.name || '').trim().toLowerCase();
+      nameEl.addEventListener('input', function () {
+        okBtn.disabled = nameEl.value.trim().toLowerCase() !== want;
+      });
+      modal.querySelector('[data-act="export"]').addEventListener('click', function () {
+        CT.io.exportPlayerJSON(player.id);
+      });
+      modal.querySelector('[data-act="cancel"]').addEventListener('click', close);
+      okBtn.addEventListener('click', function () {
+        if (okBtn.disabled) return;
+        const snap = store.deletePlayerCascade(player.id);
+        store.stashTrash(snap);
+        close();
+        offerUndo(player.name);
         if (typeof onDone === 'function') onDone();
         else CT.router.route();
       });
+    });
+  }
+
+  // ----- "recently deleted" restore bar (covers a missed undo toast) -----
+  let restoreBarDismissedFor = null; // snapshot player id the coach dismissed
+
+  function restoreBarHtml() {
+    const slot = store.peekTrash();
+    if (!slot) return '';
+    const p = slot.snapshot.player;
+    if (p.id === restoreBarDismissedFor) return '';
+    const mins = Math.max(1, Math.ceil((Number(slot.expiresAt) - Date.now()) / 60000));
+    return '<div class="restore-bar" data-pid="' + esc(p.id) + '">' +
+      '<i data-lucide="undo-2"></i>' +
+      '<span class="restore-bar-txt">Recently deleted: <strong>' + esc(p.name) + '</strong>' +
+        ' <span class="muted">(expires in ' + mins + 'm)</span></span>' +
+      '<button class="btn btn-sm" data-act="restore">Restore</button>' +
+      '<button class="btn btn-sm btn-ghost" data-act="dismiss-restore" aria-label="Dismiss">&times;</button>' +
+    '</div>';
+  }
+
+  function wireRestoreBar(root) {
+    const bar = root.querySelector('.restore-bar');
+    if (!bar) return;
+    bar.querySelector('[data-act="restore"]').addEventListener('click', function () {
+      const restored = store.restoreTrash();
+      if (restored) {
+        ui.toast('Restored ' + restored.name);
+        CT.router.navigate('#/player/' + restored.id);
+      } else {
+        ui.toast('Undo window expired.');
+        CT.router.route();
+      }
+    });
+    bar.querySelector('[data-act="dismiss-restore"]').addEventListener('click', function () {
+      restoreBarDismissedFor = bar.getAttribute('data-pid');
+      bar.remove();
+    });
   }
 
   // ----- main render -----
@@ -216,11 +325,13 @@
       '<button class="btn btn-primary" id="add-player"><i data-lucide="user-plus"></i>Add player</button>';
 
     let html = ui.pageHead('Players', players.length + ' player' + (players.length === 1 ? '' : 's') + ' · ' + pitchers + ' pitcher' + (pitchers === 1 ? '' : 's'), actions);
+    html += restoreBarHtml();
 
     if (!players.length) {
       html += ui.emptyState('users', 'No players yet', 'Add your first player to get started.',
         '<button class="btn btn-primary" id="add-empty"><i data-lucide="user-plus"></i>Add player</button>');
       root.innerHTML = html;
+      wireRestoreBar(root);
       const ae = root.querySelector('#add-empty');
       if (ae) ae.addEventListener('click', function () { openForm(null); });
       // The page-head "Add player" button must work on the first-run screen too.
@@ -233,6 +344,7 @@
       players.map(playerCard).join('') +
     '</div>';
     root.innerHTML = html;
+    wireRestoreBar(root);
 
     const add = root.querySelector('#add-player');
     if (add) add.addEventListener('click', function () { openForm(null); });

@@ -16,7 +16,9 @@
 
   const CT = window.CT;
   const KEY = 'diamondMind.v3';
-  const SCHEMA_VERSION = 3;
+  const SCHEMA_VERSION = 4; // v4 = v3 + lesson focus/inline metrics/readiness/generator fields
+  const TRASH_KEY = KEY + '.trash';     // single-slot delete-undo (OUTSIDE state; exports stay clean)
+  const TRASH_TTL_MS = 10 * 60 * 1000;  // 10-minute undo window
 
   // collection name -> { factory, playerFk } . playerFk drives the cascade
   // delete declaratively (no hard-coded child list to forget updating).
@@ -58,7 +60,12 @@
       onboarding: { dismissed: !!(d.onboarding && d.onboarding.dismissed) },
       // Last module selection — pre-checks the next assessment's module picker.
       assessPreset: preset && preset.length ? preset : ['hitting', 'throwing', 'speed'],
-      speedDefault: (d.speedDefault === 'thirtyYard' || d.speedDefault === 'sixtyYard') ? d.speedDefault : null
+      speedDefault: (d.speedDefault === 'thirtyYard' || d.speedDefault === 'sixtyYard') ? d.speedDefault : null,
+      // v4: last-used lesson focus (pre-selects the Log-lesson modal's chips).
+      lessonFocusDefault: ((CT.model && CT.model.SESSION_FOCUS) || []).indexOf(d.lessonFocusDefault) >= 0
+        ? d.lessonFocusDefault : null,
+      // v4: seeded-drill-library version marker (0 = never seeded).
+      drillSeedVersion: Number.isFinite(Number(d.drillSeedVersion)) ? Number(d.drillSeedVersion) : 0
     };
   }
 
@@ -115,6 +122,9 @@
       try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
       if (parsed && isValidState(parsed)) {
         state = normalize(parsed);
+        // v3 (or older) blob: factories already defaulted every new field —
+        // persist so the stored blob is stamped with the current schemaVersion.
+        if (Number(parsed.schemaVersion) !== SCHEMA_VERSION) persist();
         return state;
       }
       // Corrupt/invalid v3 blob (interrupted write, quota, ...): stash the raw
@@ -207,9 +217,26 @@
     commit(next);
   }
 
+  // Everything one player owns, keyed by collection (driven by the declarative
+  // playerFk registry). Used by cascade-delete (undo snapshot) + player export.
+  function playerSnapshot(playerId) {
+    const player = getById('players', playerId);
+    if (!player) return null;
+    const removed = {};
+    COLLECTION_NAMES.forEach(function (name) {
+      const fk = COLLECTIONS[name].playerFk;
+      if (!fk) return;
+      removed[name] = (getState()[name] || []).filter(function (r) { return r[fk] === playerId; });
+    });
+    return { player: deepClone(player), removed: deepClone(removed) };
+  }
+
   // Cascade-delete a player and everything that references them (driven by the
-  // declarative playerFk field on the collection registry).
+  // declarative playerFk field on the collection registry). RETURNS the removed
+  // snapshot { player, removed: { collectionName: rows[] } } so callers can
+  // stash it for undo (stashTrash).
   function deletePlayerCascade(playerId) {
+    const snapshot = playerSnapshot(playerId);
     const next = { players: (getState().players || []).filter(function (p) { return p.id !== playerId; }) };
     COLLECTION_NAMES.forEach(function (name) {
       const fk = COLLECTIONS[name].playerFk;
@@ -217,6 +244,70 @@
       next[name] = (getState()[name] || []).filter(function (r) { return r[fk] !== playerId; });
     });
     commit(next);
+    return snapshot;
+  }
+
+  // ---- single-slot delete-undo trash (localStorage, OUTSIDE state) ----
+  // stashTrash(snapshot) -> peekTrash() -> restoreTrash(). One slot, 10-minute
+  // expiry; deliberately not part of exportAll (exports stay clean).
+  function stashTrash(snapshot) {
+    if (!snapshot || !snapshot.player) return;
+    try {
+      localStorage.setItem(TRASH_KEY, JSON.stringify({
+        expiresAt: Date.now() + TRASH_TTL_MS,
+        snapshot: snapshot
+      }));
+    } catch (err) {
+      console.warn('Diamond Mind: could not stash undo snapshot —', err && err.message);
+    }
+  }
+
+  // Valid { snapshot, expiresAt } or null (an expired/corrupt slot is cleared).
+  function peekTrash() {
+    let raw = null;
+    try { raw = localStorage.getItem(TRASH_KEY); } catch (e) { return null; }
+    if (!raw) return null;
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+    if (!parsed || !parsed.snapshot || !parsed.snapshot.player ||
+        !Number.isFinite(Number(parsed.expiresAt)) || Number(parsed.expiresAt) < Date.now()) {
+      clearTrash();
+      return null;
+    }
+    return parsed;
+  }
+
+  function clearTrash() {
+    try { localStorage.removeItem(TRASH_KEY); } catch (e) {}
+  }
+
+  // Re-insert the trashed player + every cascaded row (id-deduped concat per
+  // collection, so a partial overlap can never duplicate records). Returns the
+  // restored player or null.
+  function restoreTrash() {
+    const slot = peekTrash();
+    if (!slot) return null;
+    const snap = slot.snapshot;
+    const next = {};
+    const curPlayers = getState().players || [];
+    if (!curPlayers.some(function (p) { return p.id === snap.player.id; })) {
+      next.players = curPlayers.concat([factory('players')(snap.player)]);
+    }
+    Object.keys(snap.removed || {}).forEach(function (name) {
+      if (!COLLECTIONS[name]) return;
+      const cur = getState()[name] || [];
+      const have = {};
+      cur.forEach(function (r) { have[r.id] = true; });
+      const fac = factory(name);
+      const add = (snap.removed[name] || [])
+        .filter(function (r) { return r && r.id && !have[r.id]; })
+        .map(function (r) { try { return fac(r); } catch (e) { return null; } })
+        .filter(Boolean);
+      if (add.length) next[name] = cur.concat(add);
+    });
+    clearTrash();
+    commit(next);
+    return getById('players', snap.player.id);
   }
 
   // ---- convenience: latest metric reading per (player, metric, context) ----
@@ -329,6 +420,12 @@
     update: update,
     remove: remove,
     deletePlayerCascade: deletePlayerCascade,
+    playerSnapshot: playerSnapshot,
+    // delete-undo trash slot
+    stashTrash: stashTrash,
+    peekTrash: peekTrash,
+    restoreTrash: restoreTrash,
+    clearTrash: clearTrash,
     // bulk
     exportAll: exportAll,
     importAll: importAll,

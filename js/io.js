@@ -1,25 +1,52 @@
 /* io.js — JSON export & import of ALL data (every collection), so a coach's data
    is portable across devices and never trapped in one browser.
-   v3: exports app:'diamond-mind' schemaVersion 3. Import accepts BOTH v3 files and
-   legacy v2 'coach-tracker' exports (run through CT.migrate.fromV2), and shows a
-   per-collection record-count confirm before replacing everything. */
+   v4: exports app:'diamond-mind' schemaVersion 4 (a strict superset of v3 — v3
+   files import unchanged; factories default the new fields). Import accepts v3,
+   v4, and legacy v2 'coach-tracker' exports (run through CT.migrate.fromV2), and
+   shows a per-collection record-count confirm before replacing everything.
+   exportPlayerJSON(playerId) downloads ONE player + all their cascaded rows
+   (scope:'player') — the pre-delete escape hatch. */
 (function () {
   'use strict';
 
   const CT = window.CT;
 
-  function exportJSON() {
-    const payload = CT.store.exportAll();
+  function downloadJSON(payload, filename) {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'diamond-mind-' + CT.todayISO() + '.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function exportJSON() {
+    const payload = CT.store.exportAll();
+    downloadJSON(payload, 'diamond-mind-' + CT.todayISO() + '.json');
     CT.ui.toast('Exported ' + CT.plural(payload.players ? payload.players.length : 0, 'player') + ' + all data');
+  }
+
+  // Single-player export: the player row + every row that cascades with them
+  // (assessments, readings, session logs, workload, check-ins, anthro, stat
+  // lines, assignments). Games are NOT included (team records). Import-merge of
+  // these files is a documented future path; today they are an escape hatch.
+  function exportPlayerJSON(playerId) {
+    const snap = CT.store.playerSnapshot(playerId);
+    if (!snap) { CT.ui.toast('Player not found.'); return; }
+    const payload = Object.assign({
+      app: 'diamond-mind',
+      scope: 'player',
+      schemaVersion: CT.store.SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      player: snap.player
+    }, snap.removed);
+    const slug = String(snap.player.name || 'player').trim().toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'player';
+    downloadJSON(payload, 'diamond-mind-player-' + slug + '-' + CT.todayISO() + '.json');
+    CT.ui.toast('Exported ' + snap.player.name + '’s data');
   }
 
   // Human labels for the count-confirm summary (only non-empty collections shown).
@@ -46,12 +73,17 @@
     if (CT.migrate && CT.migrate.isV2(data)) {
       return { data: CT.migrate.fromV2(data), from: 'v2' };
     }
+    if (data.scope === 'player') {
+      throw new Error('That is a single-player export — full imports need an all-data file.');
+    }
     if (!Array.isArray(data.players)) throw new Error('Import is missing a "players" array.');
     if (data.app && data.app !== 'diamond-mind') throw new Error('Unrecognized app "' + data.app + '".');
-    if (data.schemaVersion != null && Number(data.schemaVersion) !== CT.store.SCHEMA_VERSION) {
+    // v4 is a strict superset of v3 — accept both (v3 files gain the new fields
+    // via factory defaults on importAll/normalize).
+    if (data.schemaVersion != null && [3, 4].indexOf(Number(data.schemaVersion)) < 0) {
       throw new Error('Unsupported schema version ' + data.schemaVersion + '.');
     }
-    return { data: data, from: 'v3' };
+    return { data: data, from: 'v' + (data.schemaVersion || 3) };
   }
 
   // Reads a file, validates/migrates, confirms counts, replaces ALL data, runs onDone.
@@ -102,5 +134,5 @@
     input.click();
   }
 
-  window.CT.io = { exportJSON: exportJSON, importJSON: importJSON };
+  window.CT.io = { exportJSON: exportJSON, exportPlayerJSON: exportPlayerJSON, importJSON: importJSON };
 })();

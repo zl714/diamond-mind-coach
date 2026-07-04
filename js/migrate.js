@@ -25,6 +25,13 @@
    • metricReadings: + source ('assessment' when tied to a session).
    • persisted benchmarks collection: DROPPED (reads always went to the static
      CT.benchmarks module anyway).
+
+   v3 -> v4 (schemaVersion 4) needs NO transform here: v4 is a strict superset
+   (SessionLog.focus, MetricReading.sessionLogId, Player.readiness,
+   Program.source/goalId/generatorMeta, ProgramDay.intensity, new settings).
+   The model factories default every new field, so store.load()/importAll
+   upgrade v3 blobs losslessly; a v4 export re-imports into a v3 build cleanly
+   (unknown fields dropped by that build's factories).
    Exposed on window.CT.migrate. */
 (function () {
   'use strict';

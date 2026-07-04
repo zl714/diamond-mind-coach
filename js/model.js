@@ -212,6 +212,18 @@
   // ---------------------------------------------------------------------------
   // Entity factories. Each returns a normalized, fully-defaulted object.
   // ---------------------------------------------------------------------------
+  // v4: readiness flags the program generator gates on. Stored only once the
+  // coach confirms something (null = never touched, treated as all-false).
+  function normalizeReadiness(r) {
+    if (!r || typeof r !== 'object') return null;
+    return {
+      minus3Bat: bool(r.minus3Bat),            // swings/moving to -3 BBCOR (OU bat eligibility 13-14)
+      maturityConfirmed: bool(r.maturityConfirmed), // physician-confirmed skeletal maturity (weighted-ball 15-16)
+      physicianCleared: bool(r.physicianCleared),   // active clearance for return-to-throw
+      updatedAt: str(r.updatedAt, nowISO())
+    };
+  }
+
   function Player(d) {
     d = d || {};
     const age = ageFromBirthdate(d.birthdate);
@@ -228,6 +240,7 @@
       jersey: str(d.jersey, ''),
       notes: str(d.notes, ''),
       photoInitials: str(d.photoInitials, ''),
+      readiness: normalizeReadiness(d.readiness),      // v4: generator gate flags (null = unset)
       createdAt: str(d.createdAt, nowISO()),
       updatedAt: str(d.updatedAt, nowISO())
     };
@@ -290,6 +303,9 @@
       // v3: provenance — where the number came from.
       source: ['assessment', 'session', 'migrated-quickstat'].indexOf(d.source) >= 0
         ? d.source : (d.assessmentSessionId ? 'assessment' : 'session'),
+      // v4: provenance link — the lesson/session the number was captured in
+      // (source 'session' only; assessment readings keep assessmentSessionId).
+      sessionLogId: d.sessionLogId || null,
       date: str(d.date, CT.todayISO()),
       correctsId: d.correctsId || null,
       voided: bool(d.voided),
@@ -449,15 +465,22 @@
     return { id: str(x.id, id('pi')), kind: 'step', text: str(x.text, '') };
   }
 
+  // v4: per-day intensity chip (generator constraint checks + display).
+  const DAY_INTENSITIES = ['high', 'medium', 'low', 'recovery'];
+
   function ProgramDay(x) {
     x = x || {};
     return {
       weekIndex: num(x.weekIndex, 0),
       dayIndex: num(x.dayIndex, 0),
       title: str(x.title, ''),
+      intensity: DAY_INTENSITIES.indexOf(x.intensity) >= 0 ? x.intensity : null,
       items: (Array.isArray(x.items) ? x.items : []).map(ProgramItem)
     };
   }
+
+  // v4: where a program came from (the generator stamps 'generated').
+  const PROGRAM_SOURCES = ['manual', 'template', 'generated'];
 
   function Program(d) {
     d = d || {};
@@ -466,6 +489,10 @@
       templateId: d.templateId || null,
       name: str(d.name, 'Program'),
       type: PROGRAM_TYPES.indexOf(d.type) >= 0 ? d.type : 'custom',
+      source: PROGRAM_SOURCES.indexOf(d.source) >= 0 ? d.source : 'manual', // v4
+      goalId: d.goalId || null,                                             // v4: generator goal
+      generatorMeta: (d.generatorMeta && typeof d.generatorMeta === 'object')
+        ? JSON.parse(JSON.stringify(d.generatorMeta)) : null,               // v4: audit snapshot
       description: str(d.description, ''),
       weeks: Math.max(1, num(d.weeks, 4)),
       daysPerWeek: Math.max(0, num(d.daysPerWeek, 3)), // 0 = overlay (no scheduled days)
@@ -500,7 +527,15 @@
   // SessionLog (v3) — replaces BOTH Lesson and ProgramSession. One record per
   // logged coaching/program session. Program sessions are logged ON DEMAND
   // (never pre-generated), so nothing goes stale.
+  // v4: a "LESSON" is definitionally a SessionLog with assignmentId === null;
+  // its `focus` drives the quick-numbers metric block and feed copy.
   // ---------------------------------------------------------------------------
+  const SESSION_FOCUS = ['hitting', 'throwing', 'fielding', 'speed', 'strength', 'mixed'];
+  const SESSION_FOCUS_LABELS = {
+    hitting: 'Hitting', throwing: 'Throwing', fielding: 'Fielding',
+    speed: 'Speed', strength: 'Strength', mixed: 'Mixed'
+  };
+
   function SessionLog(d) {
     d = d || {};
     const itemChecks = {};
@@ -511,6 +546,7 @@
       id: str(d.id, id('sl')),
       playerId: str(d.playerId, ''),
       date: str(d.date, CT.todayISO()),
+      focus: SESSION_FOCUS.indexOf(d.focus) >= 0 ? d.focus : null, // v4: lesson focus
       assignmentId: d.assignmentId || null,
       programDayRef: (d.programDayRef && typeof d.programDayRef === 'object')
         ? { weekIndex: num(d.programDayRef.weekIndex, 0), dayIndex: num(d.programDayRef.dayIndex, 0) } : null,
@@ -633,6 +669,10 @@
     DRILL_CATEGORY_LABELS: DRILL_CATEGORY_LABELS,
     DRILL_CATEGORY_MAP: DRILL_CATEGORY_MAP,
     PROGRAM_TYPES: PROGRAM_TYPES,
+    PROGRAM_SOURCES: PROGRAM_SOURCES,
+    DAY_INTENSITIES: DAY_INTENSITIES,
+    SESSION_FOCUS: SESSION_FOCUS,
+    SESSION_FOCUS_LABELS: SESSION_FOCUS_LABELS,
     METRIC_CATALOG: METRIC_CATALOG,
     METRIC_BY_KEY: METRIC_BY_KEY,
     ASSESS_MODULES: ASSESS_MODULES,

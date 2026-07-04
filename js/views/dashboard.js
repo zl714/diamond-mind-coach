@@ -194,16 +194,27 @@
     players.forEach(function (p) {
       store.sessionLogsForPlayer(p.id).forEach(function (l) {
         const n = (l.extraDrillIds || []).length;
-        let fallback;
+        let title, fallback;
         if (l.assignmentId) {
           const a = store.getById('programAssignments', l.assignmentId);
           const prog = a ? store.getById('programs', a.programId) : null;
+          title = p.name + ' — session';
           fallback = (prog ? prog.name : 'Program') + ' session' + (l.throws ? ' · ' + l.throws + ' throws' : '');
         } else {
-          fallback = n ? n + ' drill' + (n === 1 ? '' : 's') + ' worked' : 'Coaching session';
+          // v4 lesson: focus in the title, inline readings ahead of notes.
+          const focusLabel = l.focus ? (model.SESSION_FOCUS_LABELS[l.focus] || l.focus) : null;
+          title = p.name + ' — lesson' + (focusLabel ? ' (' + focusLabel + ')' : '');
+          const nums = store.byPlayer('metricReadings', p.id)
+            .filter(function (r) { return r.sessionLogId === l.id && !r.voided; })
+            .map(function (r) {
+              const m = model.metric(r.metricKey);
+              return (m ? m.label : r.metricKey) + ' ' + r.value + (m && m.unit ? ' ' + m.unit : '');
+            });
+          fallback = nums.length ? nums.join(' · ')
+            : (n ? n + ' drill' + (n === 1 ? '' : 's') + ' worked' : 'Coaching lesson');
         }
         events.push({ date: l.date, sort: l.date + '_2', dot: 'var(--accent-500)', pid: p.id,
-          title: p.name + ' — session', outcome: l.notes || fallback });
+          title: title, outcome: l.notes || fallback });
       });
       store.byPlayer('assessmentSessions', p.id).forEach(function (a) {
         const rs = store.byPlayer('metricReadings', p.id).filter(function (r) { return r.assessmentSessionId === a.id && !r.voided; });
@@ -276,9 +287,29 @@
     '</' + tag + '>';
   }
 
+  // Step 2 (v4): a lesson OR an assessment both start the development timeline,
+  // so the step row carries two mini-CTAs instead of one whole-row link.
+  function onboardLessonStep(done, locked) {
+    const cls = 'onboard-step' + (done ? ' done' : '') + (locked ? ' locked' : '');
+    const num = done ? '<i data-lucide="check"></i>' : '2';
+    const ctas = (done || locked) ? '' :
+      '<span class="onboard-ctas">' +
+        '<a class="btn btn-sm" href="#/assess/new"><i data-lucide="gauge"></i>Assessment</a>' +
+        '<button class="btn btn-sm" id="ob-lesson" type="button"><i data-lucide="notebook-pen"></i>Lesson</button>' +
+      '</span>';
+    return '<div class="' + cls + '">' +
+      '<span class="onboard-num">' + num + '</span>' +
+      '<span class="onboard-body">' +
+        '<span class="onboard-title">Log a lesson or run an assessment</span>' +
+        '<span class="onboard-sub">Baseline with an assessment — or just log your first lesson; both start the development timeline.</span>' +
+      '</span>' +
+      (done ? '' : (locked ? '<span class="onboard-go"><i data-lucide="lock"></i></span>' : ctas)) +
+    '</div>';
+  }
+
   function onboardingHtml(players) {
     const hasPlayers = players.length > 0;
-    const hasAssessment = store.all('assessmentSessions').length > 0;
+    const hasBaseline = store.all('assessmentSessions').length > 0 || store.all('sessionLogs').length > 0;
     const hasProgram = store.all('programAssignments').length > 0;
     return ui.pageHead('Dashboard', 'Your program at a glance') +
       '<div class="dash-hero" style="' + ui.toneStyle('accent') + '">' +
@@ -287,16 +318,15 @@
           (hasPlayers ? 'Almost rolling — finish setup' : 'Welcome to Diamond Mind') + '</div>' +
         '<div class="dash-hero-sub">' +
           (hasPlayers
-            ? 'Your roster is started. Run a first assessment and assign a program to unlock the full dashboard.'
-            : 'Add your first player to start tracking development, sessions, games, and arm safety.') +
+            ? 'Your roster is started. Log a lesson or assessment and assign a program to unlock the full dashboard.'
+            : 'Add your first player to start tracking development, lessons, games, and arm safety.') +
         '</div></div>' +
         (hasPlayers ? '' : '<a class="btn btn-sm dash-hero-cta" href="#/players"><i data-lucide="user-plus"></i>Add a player</a>') +
       '</div>' +
       '<div class="onboard-steps">' +
         onboardStep(1, hasPlayers, false, '#/players', 'Add a player',
           'Name, birthdate, and positions — age bands drive benchmarks and Pitch Smart limits.') +
-        onboardStep(2, hasAssessment, !hasPlayers, '#/assess/new', 'Run a first assessment',
-          'Capture exit velo, throwing velo, and speed to baseline every player.') +
+        onboardLessonStep(hasBaseline, !hasPlayers) +
         onboardStep(3, hasProgram, !hasPlayers, '#/programs', 'Assign a program',
           'Arm care, long toss, or strength — adherence shows up here automatically.') +
       '</div>';
@@ -312,6 +342,10 @@
        !store.all('games').length && !store.all('sessionLogs').length);
     if (fresh) {
       root.innerHTML = onboardingHtml(players);
+      const obLesson = root.querySelector('#ob-lesson');
+      if (obLesson) obLesson.addEventListener('click', function () {
+        if (CT.sessionLog) CT.sessionLog.open({}); // player picker inside
+      });
       return;
     }
 
@@ -319,7 +353,8 @@
     try { alerts = (CT.alerts && CT.alerts.build) ? CT.alerts.build() : []; } catch (e) { alerts = []; }
     const r = rollup(players);
 
-    let html = ui.pageHead('Dashboard', 'Your program at a glance');
+    let html = ui.pageHead('Dashboard', 'Your program at a glance',
+      '<button class="btn" id="dash-lesson"><i data-lucide="notebook-pen"></i>Log lesson</button>');
     html += heroHtml(r, alerts);
     const todayRows = dueTodayRows();
     html += todayPanelHtml(todayRows);
@@ -333,6 +368,10 @@
 
     root.innerHTML = html;
     wireTodayPanel(root);
+    const lessonBtn = root.querySelector('#dash-lesson');
+    if (lessonBtn) lessonBtn.addEventListener('click', function () {
+      if (CT.sessionLog) CT.sessionLog.open({}); // player picker inside
+    });
   }
 
   CT.registerView('dashboard', { label: 'Dashboard', render: render });

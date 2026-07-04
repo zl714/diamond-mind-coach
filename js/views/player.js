@@ -230,7 +230,7 @@
   function programSectionHtml(player) {
     const assigns = store.byPlayer('programAssignments', player.id)
       .filter(function (a) { return a.status !== 'completed'; });
-    const adhocBtn = '<button class="btn btn-sm" data-act="prof-adhoc"><i data-lucide="clipboard-plus"></i>Ad-hoc session</button>';
+    const adhocBtn = '<button class="btn btn-sm" data-act="prof-adhoc"><i data-lucide="clipboard-plus"></i>Log lesson</button>';
 
     if (!assigns.length) {
       return ui.card({
@@ -510,10 +510,24 @@
       });
     });
 
-    // Coaching / program sessions (drills + notes + rating delta).
+    // Lessons / program sessions (drills + notes + rating delta + v4: any
+    // metric readings captured inline in a lesson, shown as delta chips).
     store.sessionLogsForPlayer(player.id).forEach(function (l) {
       const names = (l.extraDrillIds || []).map(function (id) { const d = store.getDrill(id); return d ? d.name : null; }).filter(Boolean);
       const deltas = [];
+      // Inline lesson readings -> the same delta-chip styling assessments use.
+      allReadings.filter(function (r) { return r.sessionLogId === l.id; }).forEach(function (r) {
+        const m = model.metric(r.metricKey);
+        if (!m) return;
+        const series = byKey[r.metricKey] || [];
+        const idx = series.indexOf(r);
+        const prev = idx > 0 ? series[idx - 1] : null;
+        const net = prev ? Math.round((r.value - prev.value) * 100) / 100 : 0;
+        deltas.push({
+          label: m.label, net: net, unit: m.unit, lowerBetter: !!m.lowerBetter,
+          valueText: r.value + (m.unit ? ' ' + m.unit : ''), first: !prev
+        });
+      });
       if (l.ratingDelta != null && l.ratingDelta !== 0) {
         deltas.push({ label: 'Rating', net: l.ratingDelta, unit: '', lowerBetter: false, raw: false });
       }
@@ -523,18 +537,20 @@
         const prog = a ? store.getById('programs', a.programId) : null;
         progName = prog ? prog.name : 'Program';
       }
+      const focusLabel = l.focus ? (model.SESSION_FOCUS_LABELS[l.focus] || l.focus) : null;
       const title = progName
         ? 'Program session — ' + progName + (l.programDayRef ? ' (wk ' + (l.programDayRef.weekIndex + 1) + ')' : '')
-        : 'Session — ' + (names.length ? names.length + ' drill' + (names.length === 1 ? '' : 's') + ' done' : 'coaching session');
+        : 'Lesson' + (focusLabel ? ' — ' + focusLabel : '') +
+          (names.length ? ' · ' + names.length + ' drill' + (names.length === 1 ? '' : 's') : '');
       const fallback = progName
         ? (l.throws ? l.throws + ' throws logged' : 'Completed')
-        : (names.length ? names.join(', ') : 'Coaching session');
+        : (names.length ? names.join(', ') : 'Coaching lesson');
       events.push({
         date: l.date, sort: l.date + '_1', dot: 'var(--accent-500)',
         title: title,
         outcome: l.notes || fallback,
         meta: names.length ? names.join(' · ') : '',
-        deltas: deltas
+        deltas: deltas.slice(0, 4)
       });
     });
 
@@ -566,10 +582,18 @@
   }
 
   function deltaChipHtml(d) {
+    // v4: inline lesson readings carry the measured value; a FIRST reading has
+    // no previous to diff against, so the chip shows just "Metric value".
+    const val = d.valueText ? ' ' + d.valueText : '';
+    if (d.first) {
+      return '<span class="dm-feed-delta num" style="color:var(--text-secondary);background:rgba(15,23,42,0.05);">' +
+        esc(d.label) + esc(val) + '</span>';
+    }
     const dp = deltaParts(d.net, d.lowerBetter, d.raw);
     const unit = d.unit ? ' ' + d.unit : '';
+    const diff = d.valueText ? ' · ' + dp.sign + dp.mag + esc(unit) + ' vs last' : ' ' + dp.sign + dp.mag + esc(unit);
     return '<span class="dm-feed-delta num" style="color:' + dp.color + ';background:' + dp.bg + ';">' +
-      '<i data-lucide="' + dp.glyph + '"></i>' + esc(d.label) + ' ' + dp.sign + dp.mag + esc(unit) + '</span>';
+      '<i data-lucide="' + dp.glyph + '"></i>' + esc(d.label) + esc(val) + diff + '</span>';
   }
 
   function feedItemHtml(ev) {
@@ -657,6 +681,7 @@
       '</select>' +
       '<button class="btn btn-ghost" id="prof-edit"><i data-lucide="pencil"></i>Edit</button>' +
       '<a class="btn" href="#/assess/' + esc(player.id) + '"><i data-lucide="history"></i>Assessments</a>' +
+      '<button class="btn" id="prof-lesson"><i data-lucide="notebook-pen"></i>Log lesson</button>' +
       '<a class="btn btn-primary" href="#/assess/new/' + esc(player.id) + '"><i data-lucide="clipboard-plus"></i>New assessment</a>';
 
     // Default metric tab: first with data, else Hitting.
@@ -685,7 +710,7 @@
       '<div id="dm-feed-slot" aria-busy="true">' + skelRows(6, 60) + '</div>' +
       '<div class="prof-danger">' +
         '<div class="prof-danger-txt"><strong>Remove ' + esc(player.name) + '</strong>' +
-          '<span class="muted">Deletes this player and all their assessments, stats, workload, and programs.</span></div>' +
+          '<span class="muted">Deletes this player and all their assessments, readings, lessons, workload, and program assignments. Games stay — only their stat lines are removed. 10-minute undo.</span></div>' +
         '<button class="btn btn-danger" id="prof-delete"><i data-lucide="trash-2"></i>Delete player</button>' +
       '</div>';
 
@@ -725,6 +750,10 @@
     });
     const adhocBtn = root.querySelector('[data-act="prof-adhoc"]');
     if (adhocBtn) adhocBtn.addEventListener('click', function () {
+      if (CT.sessionLog) CT.sessionLog.open({ playerId: player.id });
+    });
+    const lessonBtn = root.querySelector('#prof-lesson');
+    if (lessonBtn) lessonBtn.addEventListener('click', function () {
       if (CT.sessionLog) CT.sessionLog.open({ playerId: player.id });
     });
 

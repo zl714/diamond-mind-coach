@@ -124,6 +124,7 @@
     buildNav();
     refreshAlertsBell();
     closeAlertsPanel();
+    closeQuickAdd();
     // An open modal must not survive navigation (it would overlay the new
     // view and leak its document-level Escape listener).
     try { CT.ui.closeModal(); } catch (e) {}
@@ -248,6 +249,70 @@
     refreshAlertsBell();
   }
 
+  // ---------------------------------------------------------------------------
+  // Header "+" quick-log popover: Log a lesson / New assessment / Log program
+  // session. Same dropdown pattern as the alerts bell.
+  // ---------------------------------------------------------------------------
+  function renderQuickAddPanel() {
+    const panel = document.getElementById('quick-add-panel');
+    if (!panel) return;
+    panel.innerHTML =
+      '<div class="al-panel-head"><span class="al-panel-title">Quick log</span></div>' +
+      '<div class="al-panel-list">' +
+        '<button class="qa-item" type="button" data-qa="lesson">' +
+          '<i data-lucide="notebook-pen"></i>' +
+          '<span class="qa-txt"><span class="qa-name">Log a lesson</span>' +
+          '<span class="qa-sub">Ad-hoc coaching — drills, quick numbers, notes</span></span></button>' +
+        '<a class="qa-item" href="#/assess/new">' +
+          '<i data-lucide="gauge"></i>' +
+          '<span class="qa-txt"><span class="qa-name">New assessment</span>' +
+          '<span class="qa-sub">Baseline metrics with percentile previews</span></span></a>' +
+        '<a class="qa-item" href="#/programs">' +
+          '<i data-lucide="clipboard-check"></i>' +
+          '<span class="qa-txt"><span class="qa-name">Log program session</span>' +
+          '<span class="qa-sub">Check off an assigned program day</span></span></a>' +
+      '</div>';
+    paintIcons();
+  }
+
+  function closeQuickAdd() {
+    const panel = document.getElementById('quick-add-panel');
+    const btn = document.getElementById('quick-add');
+    if (panel) panel.hidden = true;
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function wireQuickAdd() {
+    const btn = document.getElementById('quick-add');
+    const panel = document.getElementById('quick-add-panel');
+    if (!btn || !panel) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeAlertsPanel();
+      if (panel.hidden) {
+        renderQuickAddPanel();
+        panel.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+      } else {
+        closeQuickAdd();
+      }
+    });
+    panel.addEventListener('click', function (e) {
+      const lesson = e.target.closest('[data-qa="lesson"]');
+      if (lesson) {
+        closeQuickAdd();
+        if (CT.sessionLog) CT.sessionLog.open({}); // player picker inside
+        return;
+      }
+      if (e.target.closest('a')) closeQuickAdd();
+    });
+    document.addEventListener('click', function (e) {
+      if (panel.hidden) return;
+      if (!panel.contains(e.target) && !btn.contains(e.target)) closeQuickAdd();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeQuickAdd(); });
+  }
+
   // Toolbar actions (export / import / start fresh) wired once at boot.
   function wireToolbar() {
     const ex = document.getElementById('btn-export');
@@ -260,15 +325,19 @@
         'Erase ALL players, sessions, games, drills, and programs? This cannot be undone — export a backup first if you want one.',
         'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your players in Players'); route(); });
     });
-    // Quick-log '+': jump to Programs (assignments + Log-Session launchers).
+    // Legacy mobile FAB (display:none since the bottom tab bar shipped): open
+    // the lesson modal directly if it ever comes back.
     const ql = document.getElementById('quick-log');
-    if (ql) ql.addEventListener('click', function () { navigate('#/programs'); });
+    if (ql) ql.addEventListener('click', function () {
+      if (CT.sessionLog) CT.sessionLog.open({});
+    });
   }
 
   function init() {
     CT.store.load();      // hydrate from localStorage (or boot empty)
     wireToolbar();
     wireAlertsBell();
+    wireQuickAdd();
     buildNav();
     booted = true;
     window.addEventListener('hashchange', route);

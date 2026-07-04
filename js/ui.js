@@ -11,18 +11,33 @@
   // ---------------------------------------------------------------------------
   // Toast
   // ---------------------------------------------------------------------------
-  function toast(message) {
+  // toast(message, opts?) — opts { label, onClick, duration } adds an inline
+  // action button (e.g. "Player deleted — UNDO") and a longer linger.
+  function toast(message, opts) {
     const root = document.getElementById('toast-root');
     if (!root) return;
+    opts = opts || {};
     const el = document.createElement('div');
     el.className = 'toast';
     el.textContent = message;
-    root.appendChild(el);
-    setTimeout(function () {
+    let dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
       el.style.transition = 'opacity 0.3s ease';
       el.style.opacity = '0';
       setTimeout(function () { el.remove(); }, 300);
-    }, 2400);
+    }
+    if (opts.label && typeof opts.onClick === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.textContent = opts.label;
+      btn.addEventListener('click', function () { dismiss(); opts.onClick(); });
+      el.appendChild(btn);
+    }
+    root.appendChild(el);
+    setTimeout(dismiss, Number(opts.duration) > 0 ? Number(opts.duration) : 2400);
   }
 
   // ---------------------------------------------------------------------------

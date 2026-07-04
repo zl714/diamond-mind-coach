@@ -1471,3 +1471,90 @@ a.onboard-step:hover { transform: translateY(-1px); border-color: var(--border);
   .back-link, .page-head .row, .rcpt ~ .row { display: none !important; }
   .rcpt { box-shadow: none; border-color: #E2E8F0; max-width: none; }
 }
+
+/* ============================================================
+   v4 — LESSONS + SAFE DELETE (Stage 4)
+   Quick-add popover, lesson focus chips, quick numbers, toast
+   actions, delete inventory, restore bar. Existing tokens only.
+   ============================================================ */
+
+/* Header "+" quick-log popover (same dropdown pattern as the alerts bell) */
+.quick-add-wrap { position: relative; }
+.quick-add-btn i, .quick-add-btn svg { width: 20px; height: 20px; }
+/* Anchor right edge under the bell (the "+" sits one 40px button + gap left
+   of it) so the dropdown never clips the viewport. */
+.quick-add-panel { right: -52px; }
+.qa-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  width: 100%; padding: var(--sp-3) var(--sp-4);
+  background: transparent; border: none; border-bottom: 1px solid var(--divider);
+  font-family: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer;
+  color: var(--text-body);
+}
+.qa-item:last-child { border-bottom: none; }
+.qa-item:hover { background: rgba(15,23,42,0.05); color: var(--text-strong); }
+.qa-item > i, .qa-item > svg { width: 18px; height: 18px; color: var(--accent-700); flex: 0 0 auto; }
+.qa-txt { display: flex; flex-direction: column; min-width: 0; }
+.qa-name { color: var(--text-hi); font-size: var(--fs-data); font-weight: var(--fw-semibold); }
+.qa-sub { color: var(--text-secondary); font-size: var(--fs-label); }
+
+/* Lesson focus chips (single-select) */
+.focus-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.focus-chip {
+  min-height: 32px; padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-pill); border: 1px solid var(--border);
+  background: var(--surface-3); color: var(--text-secondary);
+  font-family: inherit; font-weight: var(--fw-medium); font-size: var(--fs-data);
+  cursor: pointer;
+}
+.focus-chip:hover { border-color: var(--border-strong); color: var(--text-strong); }
+.focus-chip.active { background: var(--accent-soft); color: var(--accent-700); border-color: #B3E7FB; }
+.focus-chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* Quick numbers (collapsed details block inside the lesson modal) */
+.qn-block { margin: var(--sp-2) 0; }
+.qn-body {
+  margin-top: var(--sp-2); padding: var(--sp-3);
+  background: var(--surface-3); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card);
+}
+.qn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+.qn-grid .field { margin-bottom: 0; }
+@media (max-width: 479px) { .qn-grid { grid-template-columns: 1fr; } }
+
+/* Toast action button (e.g. "Player deleted — UNDO") */
+.toast { pointer-events: auto; display: flex; align-items: center; gap: var(--sp-3); }
+.toast-action {
+  background: transparent; border: none; padding: 0;
+  color: var(--accent-700); font-family: inherit; font-size: var(--fs-sm);
+  font-weight: var(--fw-bold); letter-spacing: 0.02em; cursor: pointer;
+}
+.toast-action:hover { color: var(--accent-600); text-decoration: underline; }
+
+/* Delete-player modal: cascade inventory */
+.del-inv {
+  background: var(--surface-3); border: 1px solid var(--border-subtle);
+  border-radius: var(--r-card); padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.del-inv .kv-row:last-child { border-bottom: none; }
+
+/* "Recently deleted" restore bar on the Players view */
+.restore-bar {
+  display: flex; align-items: center; gap: var(--sp-3);
+  background: var(--warn-soft); border: 1px solid var(--warn-border);
+  border-radius: var(--r-card); padding: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-4);
+  color: var(--text-body); font-size: var(--fs-data);
+}
+.restore-bar > i, .restore-bar > svg { width: 16px; height: 16px; color: var(--warn); flex: 0 0 auto; }
+.restore-bar-txt { flex: 1 1 auto; min-width: 0; }
+.restore-bar .btn-ghost { min-height: 28px; padding: 0 var(--sp-2); font-size: var(--fs-h4); line-height: 1; }
+
+/* Onboarding step 2: two mini-CTAs (lesson OR assessment) */
+.onboard-ctas { display: flex; gap: var(--sp-2); flex: 0 0 auto; align-items: center; }
+@media (max-width: 479px) { .onboard-ctas { flex-direction: column; align-items: stretch; } }
+
+/* Throws slot participates in the field-row grid when visible */
+#sl-throws-slot { display: contents; }
+#sl-throws-slot[hidden] { display: none; }

@@ -79,16 +79,25 @@ so `CT.registerView` exists when they run. **Registration order = sidebar order.
 
 ## 2. `CT.store` — versioned immutable localStorage (store.js)
 
-Key = **`diamondMind.v3`**, `schemaVersion = 3`. Boots EMPTY; a legacy real
+Key = **`diamondMind.v3`**, `schemaVersion = 4`. Boots EMPTY; a legacy real
 (non-demo) `coachTracker.v2` blob is migrated once via `CT.migrate` (v2 blob kept
 as rollback). There is **no demo/sample data** anymore.
+
+**v3 ⇄ v4 compatibility:** v4 is a strict superset of v3 (adds
+`SessionLog.focus`, `MetricReading.sessionLogId`, `Player.readiness`,
+`Program.source/goalId/generatorMeta`, `ProgramDay.intensity`, and settings
+`lessonFocusDefault` + `drillSeedVersion`). A v3 blob upgrades in place on
+`load()` (factory defaults; no transform); a v4 export re-imports into a v3
+build cleanly (that build's factories drop the unknown fields). Note the v3
+blob is overwritten in place — export a backup before downgrading.
 
 Collections (`CT.store.COLLECTION_NAMES`):
 `teams, seasons, players, anthroReadings, assessmentSessions, metricReadings,
 games, battingStatLines, pitchingAppearances, fieldingStatLines, workloadLogs,
 dailyCheckIns, drills, programs, programAssignments, sessionLogs` — plus a
 `settings` singleton (NOT a collection): `{ orgName, coachName,
-onboarding:{dismissed}, assessPreset[], speedDefault }`.
+onboarding:{dismissed}, assessPreset[], speedDefault, lessonFocusDefault,
+drillSeedVersion }`.
 
 **Append-only:** `metricReadings`, `workloadLogs` (update() throws; corrections
 add a new row; `remove()` exists for hard deletes only).
@@ -104,7 +113,12 @@ store.drillLibrary() / getDrill(id) / drillsByCategory(cat)
 store.getSessionLog(id) / sessionLogsForPlayer(pid)  // newest-first
 store.setSessionDrills(logId, ids) / setSessionNotes(logId, text)
 store.insert(name, data) / append(name, data) / update(name, id, patch) / remove(name, id)
-store.deletePlayerCascade(playerId)   // driven by declarative playerFk on the registry
+store.deletePlayerCascade(playerId)   // driven by declarative playerFk on the registry;
+                                      // RETURNS { player, removed:{collection: rows[]} }
+store.playerSnapshot(playerId)        // same shape, read-only (delete preview + player export)
+store.stashTrash(snapshot) / peekTrash() / restoreTrash() / clearTrash()
+                                      // single-slot 10-min delete-undo (diamondMind.v3.trash,
+                                      // OUTSIDE state so exports stay clean)
 store.exportAll() / importAll(data) / clearAll()
 ```
 
@@ -207,6 +221,10 @@ still get the full feature.
 
 ## 11. `CT.io` — export / import (io.js)
 
-Export = `{ app:'diamond-mind', schemaVersion:3, exportedAt, settings,
-...collections }`. Import accepts v3 or legacy v2 files (v2 runs `CT.migrate`)
-and shows a per-collection record-count confirm before replacing everything.
+Export = `{ app:'diamond-mind', schemaVersion:4, exportedAt, settings,
+...collections }`. Import accepts v3, v4, or legacy v2 files (v2 runs
+`CT.migrate`) and shows a per-collection record-count confirm before replacing
+everything. `CT.io.exportPlayerJSON(playerId)` downloads one player + all their
+cascaded rows tagged `{ scope:'player', schemaVersion:4 }` — an escape hatch
+offered in the delete-player modal (import-merge of these files is a documented
+future path; full import rejects them).

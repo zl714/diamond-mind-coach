@@ -46,6 +46,13 @@
       <header class="app-header">
         <div class="app-header-inner">
           <div class="app-header-spacer"></div>
+          <!-- Quick-log "+": 3-item popover — lesson / assessment / program session -->
+          <div class="quick-add-wrap">
+            <button id="quick-add" class="alerts-bell quick-add-btn" type="button" aria-label="Quick log" aria-haspopup="true" aria-expanded="false">
+              <i data-lucide="plus"></i>
+            </button>
+            <div id="quick-add-panel" class="alerts-panel quick-add-panel" role="menu" hidden></div>
+          </div>
           <div class="alerts-bell-wrap">
             <button id="alerts-bell" class="alerts-bell" type="button" aria-label="Alerts" aria-haspopup="true" aria-expanded="false">
               <i data-lucide="bell"></i>
