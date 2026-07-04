@@ -80,7 +80,10 @@ integration. If you do:
 diamond-mind-coach/
 ├── index.html
 ├── assets/
-│   └── diamond-mind-logo.png
+│   ├── diamond-mind-logo.png       # source art (not loaded by the page)
+│   ├── diamond-mind-logo-360.png   # optimized sidebar logo
+│   ├── apple-touch-icon.png
+│   └── favicon.png
 ├── docs/
 │   └── screenshot-dashboard.png
 ├── css/
