@@ -1,7 +1,8 @@
-/* sample-data.js — clearly-fictional DEMO seed so every view is populated on first
-   load (never a blank screen). Names are obviously demo ("Demo — …"). Built from
-   the real model factories so the shapes always match. HONEST placeholder data —
-   not real client outcomes. Exposed as CT.buildSampleData(). */
+/* sample-data.js — fictional DEMO seed so every view is populated on first load
+   (never a blank screen). Player names read naturally; the "DEMO DATA" badge in the
+   sidebar is the sole demo indicator. Built from the real model factories so the
+   shapes always match. HONEST placeholder data — not real client outcomes.
+   Exposed as CT.buildSampleData(). */
 (function () {
   'use strict';
 
@@ -29,16 +30,16 @@
       programAssignments = [], programSessions = [], drills = [], lessons = [];
 
     // ---- team / season ----
-    const team = M.Team({ id: 'demo_team', name: 'Demo Mavericks (Travel)', ageBand: '13-14U', level: 'youth', season: '2026 Spring' });
+    const team = M.Team({ id: 'demo_team', name: 'Mavericks (Travel)', ageBand: '13-14U', level: 'youth', season: '2026 Spring' });
     teams.push(team);
     const season = M.Season({ id: 'demo_season', name: '2026 Spring', year: 2026, startDate: daysBack(70), endDate: daysBack(-30), level: 'youth' });
     seasons.push(season);
 
     // ---- players across age bands ----
-    const mateo = M.Player({ id: 'demo_p_mateo', name: 'Demo — Mateo Reyes', birthdate: birthdateForAge(11), bats: 'R', throws: 'R', positions: ['Shortstop', 'Second Base'], teamId: team.id, jersey: '7', notes: 'Demo client. Barrel control + staying inside the ball.' });
-    const jaylen = M.Player({ id: 'demo_p_jaylen', name: 'Demo — Jaylen Brooks', birthdate: birthdateForAge(13), bats: 'L', throws: 'L', positions: ['Pitcher', 'Center Field'], teamId: team.id, jersey: '21', notes: 'Demo client. Building arm health, changeup feel.' });
-    const owen = M.Player({ id: 'demo_p_owen', name: 'Demo — Owen Caldwell', birthdate: birthdateForAge(16), bats: 'R', throws: 'R', positions: ['Pitcher', 'First Base'], teamId: team.id, jersey: '34', notes: 'Demo client. HS arm — periodized throwing + strict Pitch Smart.' });
-    const sofia = M.Player({ id: 'demo_p_sofia', name: 'Demo — Sofia Nguyen', birthdate: birthdateForAge(10), bats: 'R', throws: 'R', positions: ['Center Field', 'Second Base'], teamId: team.id, jersey: '3', notes: 'Demo client. First-step quickness + reads off the bat.' });
+    const mateo = M.Player({ id: 'demo_p_mateo', name: 'Mateo Reyes', birthdate: birthdateForAge(11), bats: 'R', throws: 'R', positions: ['Shortstop', 'Second Base'], teamId: team.id, jersey: '7', notes: 'Barrel control + staying inside the ball.' });
+    const jaylen = M.Player({ id: 'demo_p_jaylen', name: 'Jaylen Brooks', birthdate: birthdateForAge(13), bats: 'L', throws: 'L', positions: ['Pitcher', 'Center Field'], teamId: team.id, jersey: '21', notes: 'Building arm health, changeup feel.' });
+    const owen = M.Player({ id: 'demo_p_owen', name: 'Owen Caldwell', birthdate: birthdateForAge(16), bats: 'R', throws: 'R', positions: ['Pitcher', 'First Base'], teamId: team.id, jersey: '34', notes: 'HS arm — periodized throwing + strict Pitch Smart.' });
+    const sofia = M.Player({ id: 'demo_p_sofia', name: 'Sofia Nguyen', birthdate: birthdateForAge(10), bats: 'R', throws: 'R', positions: ['Center Field', 'Second Base'], teamId: team.id, jersey: '3', notes: 'First-step quickness + reads off the bat.' });
     players.push(mateo, jaylen, owen, sofia);
 
     // ---- anthro time-series ----
@@ -51,7 +52,7 @@
 
     // ---- assessments + append-only metric readings ----
     function assess(player, date, type, readings) {
-      const a = M.AssessmentSession({ playerId: player.id, date: date, type: type, location: 'Demo Facility' });
+      const a = M.AssessmentSession({ playerId: player.id, date: date, type: type, location: 'Prospect Field' });
       assessmentSessions.push(a);
       readings.forEach(function (r) {
         metricReadings.push(M.MetricReading(Object.assign({ playerId: player.id, assessmentSessionId: a.id, date: date }, r)));

@@ -533,6 +533,8 @@
   function render(root, ctx) {
     // Deep link #/programs/<tabId> can preselect a sub-tab.
     if (ctx && ctx.param && TABS.some(function (t) { return t.id === ctx.param; })) state.tab = ctx.param;
+    // When hosted inside the Sessions wrapper the H1 lives upstream.
+    const embedded = !!(ctx && ctx.embedded);
 
     const players = store.getPlayers();
     const activeCount = activeAssignments().length;
@@ -564,7 +566,7 @@
         '</div>';
     }
 
-    root.innerHTML = ui.pageHead('Programs & Check-In', subtitle) + nav + hero + '<div id="pgm-body"></div>';
+    root.innerHTML = (embedded ? '' : ui.pageHead('Programs & Check-In', subtitle)) + nav + hero + '<div id="pgm-body"></div>';
 
     root.querySelectorAll('[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { state.tab = b.getAttribute('data-tab'); CT.router.route(); });
@@ -572,7 +574,7 @@
 
     if (!players.length) {
       root.querySelector('#pgm-body').innerHTML = ui.emptyState('users', 'No players yet',
-        'Add players in the Roster tab, then assign programs and log check-ins here.');
+        'Add players in the Players tab, then assign programs and log check-ins here.');
       return;
     }
 
@@ -581,5 +583,7 @@
     else renderToday(root);
   }
 
-  CT.registerView('programs', { label: 'Programs', render: render });
+  // Hosted inside the Sessions wrapper (not a standalone nav destination).
+  window.CT.views = window.CT.views || {};
+  window.CT.views.programs = { label: 'Programs', render: render };
 })();

@@ -255,8 +255,8 @@
     const players = store.getPlayers();
     if (!players.length) {
       root.innerHTML = ui.pageHead('Assessments', 'Log assessment sessions & metric readings') +
-        ui.emptyState('users', 'No players yet', 'Add a player on the Roster tab before logging assessments.',
-          '<a class="btn btn-primary" href="#/roster"><i data-lucide="users"></i>Go to Roster</a>');
+        ui.emptyState('users', 'No players yet', 'Add a player on the Players tab before logging assessments.',
+          '<a class="btn btn-primary" href="#/players"><i data-lucide="users"></i>Go to Players</a>');
       return;
     }
 
@@ -316,5 +316,7 @@
     if (le) le.addEventListener('click', function () { openForm(null); });
   }
 
-  CT.registerView('assessment', { label: 'Assessments', render: render });
+  // Reached from Players ("New assessment") and the player profile ("Log
+  // assessment"); routable but not a top-level nav destination.
+  CT.registerView('assessment', { label: 'Assessments', render: render, hidden: true });
 })();

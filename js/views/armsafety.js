@@ -311,7 +311,7 @@
       root.innerHTML = ui.pageHead('Arm Safety', 'Pitch Smart workload & ACWR') +
         ui.emptyState('shield', 'No arms to monitor yet',
           'Add a pitcher (or log any throwing workload) to see the Pitch Smart clearance console.',
-          '<a class="btn btn-primary" href="#/roster"><i data-lucide="user-plus"></i>Go to Roster</a>');
+          '<a class="btn btn-primary" href="#/players"><i data-lucide="user-plus"></i>Go to Players</a>');
       return;
     }
 

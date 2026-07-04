@@ -18,7 +18,8 @@
     minPA: 1,
     minIP: 1,           // innings (decimal ok)
     showBelow: false,
-    sorts: null         // { bat:{key,dir}, pit:{key,dir}, fld:{key,dir} }
+    sorts: null,        // { bat:{key,dir}, pit:{key,dir}, fld:{key,dir} }
+    embedded: false     // true when hosted inside the Games wrapper (skips H1)
   };
   let mountRoot = null;
 
@@ -229,8 +230,10 @@
     const rows = buildRows(players, gameIds);
 
     let html = '<div class="season-view">';
-    html += ui.pageHead('Team & Season Stats',
-      (state.scope === 'career' ? 'Career totals' : 'Season') + ' · all rates recomputed from raw game counters');
+    if (!state.embedded) {
+      html += ui.pageHead('Team & Season Stats',
+        (state.scope === 'career' ? 'Career totals' : 'Season') + ' · all rates recomputed from raw game counters');
+    }
 
     // ---- scope + season controls ----
     const seasons = seasonsSorted();
@@ -393,14 +396,17 @@
 
   function render(root, ctx) {
     mountRoot = root;
+    state.embedded = !!(ctx && ctx.embedded);
     const players = store.getPlayers();
     if (!players.length) {
-      root.innerHTML = ui.pageHead('Team & Season Stats', 'Derived team & season rate stats') +
+      root.innerHTML = (state.embedded ? '' : ui.pageHead('Team & Season Stats', 'Derived team & season rate stats')) +
         ui.emptyState('bar-chart-3', 'No players yet', 'Add players and log games to see team and season stats.');
       return;
     }
     build(root);
   }
 
-  CT.registerView('season', { label: 'Season Stats', render: render });
+  // Hosted inside the Games wrapper (not a standalone nav destination).
+  window.CT.views = window.CT.views || {};
+  window.CT.views.season = { label: 'Season Stats', render: render };
 })();

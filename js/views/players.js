@@ -1,12 +1,19 @@
-/* views/roster.js — REFERENCE VIEW (the pattern the other 7 views copy).
-   Player list + add/edit/delete with anthropometrics, a Pitch-Smart "cleared to
-   pitch?" badge, and last-assessment date. Fully working. Registers itself via
-   CT.registerView('roster', { label, render }). */
+/* views/players.js — PLAYERS (roster). Decluttered flat cards: one calm surface
+   per player, NO nested stat tiles. The whole card is a link to that player's
+   profile (#/player/<id>). Right-side status cluster carries the only two things a
+   coach scans for at a glance: Pitch-Smart clearance + an "Assess due" flag when the
+   last assessment is stale. Height/weight are a single whisper-quiet line. Edit /
+   Delete live on the player profile, not here.
+   Page actions: New assessment + Add player. The add/edit form and cascade-delete
+   are exposed on CT.playersUI so the profile can reuse them.
+   Registers via CT.registerView('players', { label:'Players', render }). */
 (function () {
   'use strict';
 
   const CT = window.CT;
   const ui = CT.ui, store = CT.store, model = CT.model, esc = CT.escapeHtml;
+
+  const ASSESS_STALE_DAYS = 21; // last assessment older than this = "Assess due"
 
   // ----- helpers -----
   function latestAnthro(playerId) {
@@ -14,14 +21,30 @@
     if (!rows.length) return null;
     return rows.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).slice(-1)[0];
   }
-
   function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
 
-  // Pitch-Smart clearance as a color+glyph+text badge (never color alone).
-  function clearanceBadge(player) {
+  // Short position labels keep the meta line calm (Shortstop -> SS, etc.).
+  const POS_ABBR = {
+    'Pitcher': 'P', 'Catcher': 'C', 'First Base': '1B', 'Second Base': '2B',
+    'Third Base': '3B', 'Shortstop': 'SS', 'Left Field': 'LF', 'Center Field': 'CF',
+    'Right Field': 'RF', 'Utility': 'UTIL', 'Designated Hitter': 'DH'
+  };
+  function positionsShort(p) {
+    const list = (p.positions || []).map(function (x) { return POS_ABBR[x] || x; });
+    return list.length ? list.slice(0, 3).join('/') : '—';
+  }
+
+  function heightStr(inches) {
+    if (inches == null) return null;
+    return Math.floor(inches / 12) + "'" + Math.round(inches % 12) + '"';
+  }
+
+  // Pitch-Smart clearance as a color+glyph+text pill (never color alone). Returns a
+  // muted dash for non-pitchers with no workload.
+  function clearancePill(player) {
     const logs = store.byPlayer('workloadLogs', player.id);
     if (!isPitcher(player) && !logs.length) {
-      return '<span class="muted" style="font-size:var(--fs-data);">Not a pitcher</span>';
+      return '<span class="pcard-nonpitcher">—</span>';
     }
     const v = CT.pitchsmart.evaluate(player, logs);
     let tone, icon, label;
@@ -33,50 +56,47 @@
     } else {
       tone = 'green'; icon = 'check-circle'; label = 'Cleared';
     }
-    return '<span class="badge" style="' + ui.toneStyle(tone) +
-      ';border-radius:9999px;padding:2px 8px;font-size:12px;font-weight:600;border:1px solid;">' +
+    return '<span class="badge pcard-pill" style="' + ui.toneStyle(tone) + '">' +
       '<i data-lucide="' + icon + '"></i>' + esc(label) + '</span>';
   }
 
-  function clearedCount(players) {
-    return players.filter(function (p) {
-      if (!isPitcher(p)) return false;
-      return CT.pitchsmart.evaluate(p, store.byPlayer('workloadLogs', p.id)).status === 'green';
-    }).length;
+  // Amber "Assess due" badge when the newest assessment is stale (or never logged).
+  function assessBadge(player) {
+    const last = store.lastAssessmentDate(player.id);
+    const days = last ? CT.daysAgo(last) : null;
+    if (last && days <= ASSESS_STALE_DAYS) return '';
+    const label = last ? 'Assess due' : 'No assessment';
+    return '<span class="badge pcard-pill" style="' + ui.toneStyle('warn') + '">' +
+      '<i data-lucide="clock"></i>' + esc(label) + '</span>';
   }
 
   function playerCard(p) {
     const age = model.ageFromBirthdate(p.birthdate);
     const band = p.ageBand || model.ageBandFromBirthdate(p.birthdate) || '—';
     const anthro = latestAnthro(p.id);
-    const lastAssess = store.lastAssessmentDate(p.id);
-    const pos = (p.positions || []).join(', ') || '—';
-    const ht = anthro && anthro.heightIn != null ? Math.floor(anthro.heightIn / 12) + "'" + Math.round(anthro.heightIn % 12) + '"' : '—';
-    const wt = anthro && anthro.weightLb != null ? anthro.weightLb + ' lb' : '—';
+    const ht = anthro ? heightStr(anthro.heightIn) : null;
+    const wt = anthro && anthro.weightLb != null ? anthro.weightLb + ' lb' : null;
+    const whisper = [ht, wt].filter(Boolean).join(' · ');
 
-    const body =
-      '<div class="player-card">' +
+    const meta = esc(band) + (age != null ? ' · ' + age + 'y' : '') +
+      ' · ' + esc(positionsShort(p)) +
+      ' · ' + esc((p.bats || '?') + '/' + (p.throws || '?')) +
+      (p.jersey ? ' · #' + esc(p.jersey) : '');
+
+    return '<a class="pcard card clickable" href="#/player/' + esc(p.id) + '">' +
+      '<div class="pcard-lead">' +
         '<div class="avatar">' + esc(CT.initials(p.name)) + '</div>' +
-        '<div class="meta">' +
-          '<div class="name">' + esc(p.name) + '</div>' +
-          '<div class="sub">' + esc(band) + (age != null ? ' · ' + age + ' yrs' : '') + ' · ' + esc(p.level || 'youth') + '</div>' +
-          '<div class="sub">' + esc(pos) + ' · B/T ' + esc(p.bats || '?') + '/' + esc(p.throws || '?') + (p.jersey ? ' · #' + esc(p.jersey) : '') + '</div>' +
+        '<div class="pcard-main">' +
+          '<div class="pcard-name">' + esc(p.name) + '</div>' +
+          '<div class="pcard-meta">' + meta + '</div>' +
+          (whisper ? '<div class="pcard-whisper num">' + esc(whisper) + '</div>' : '') +
         '</div>' +
       '</div>' +
-      '<div class="kpi-grid" style="margin-top:.7rem;grid-template-columns:repeat(2,1fr);">' +
-        '<div class="kpi"><div class="k">Height</div><div class="v" style="font-size:1rem;">' + esc(ht) + '</div></div>' +
-        '<div class="kpi"><div class="k">Weight</div><div class="v" style="font-size:1rem;">' + esc(wt) + '</div></div>' +
-        '<div class="kpi"><div class="k">Pitch Smart</div><div class="v" style="font-size:.95rem;">' + clearanceBadge(p) + '</div></div>' +
-        '<div class="kpi"><div class="k">Last assess</div><div class="v" style="font-size:1rem;">' + (lastAssess ? esc(CT.relativeDate(lastAssess)) : '—') + '</div></div>' +
-      '</div>' +
-      '<div class="row" style="margin-top:.7rem;">' +
-        '<button class="btn btn-sm" data-act="edit" data-id="' + esc(p.id) + '"><i data-lucide="pencil"></i>Edit</button>' +
-        '<button class="btn btn-sm btn-danger" data-act="del" data-id="' + esc(p.id) + '"><i data-lucide="trash-2"></i>Delete</button>' +
-      '</div>';
-    return ui.card({ body: body });
+      '<div class="pcard-status">' + clearancePill(p) + assessBadge(p) + '</div>' +
+    '</a>';
   }
 
-  // ----- add/edit form -----
+  // ----- add/edit form (exposed on CT.playersUI for the profile to reuse) -----
   function openForm(existing) {
     const p = existing || {};
     const anthro = existing ? latestAnthro(p.id) : null;
@@ -120,14 +140,12 @@
         if (!v.ok) { ui.toast(v.errors[0]); return; }
         v.warnings.forEach(function (w) { ui.toast(w); });
 
-        // Derive ageBand from birthdate so it's always consistent.
         data.ageBand = model.ageBandFromBirthdate(data.birthdate) || '';
 
         let saved;
         if (existing) saved = store.update('players', p.id, data);
         else saved = store.insert('players', data);
 
-        // Optional anthro reading (append-only time-series).
         const h = get('heightIn'), w = get('weightLb');
         if (h || w) {
           const prev = existing ? latestAnthro(p.id) : null;
@@ -148,13 +166,29 @@
     });
   }
 
+  // Cascade-delete confirm. onDone lets the profile route back to the list.
+  function confirmDelete(player, onDone) {
+    if (!player) return;
+    ui.confirmDialog('Delete player',
+      'Delete ' + player.name + ' and all their assessments, stats, workload, and programs? This cannot be undone.',
+      'Delete', function () {
+        store.deletePlayerCascade(player.id);
+        ui.toast('Player deleted');
+        if (typeof onDone === 'function') onDone();
+        else CT.router.route();
+      });
+  }
+
   // ----- main render -----
   function render(root, ctx) {
     const players = store.getPlayers();
     const pitchers = players.filter(isPitcher).length;
 
-    let html = ui.pageHead('Roster', players.length + ' player(s) · ' + pitchers + ' pitcher(s)',
-      '<button class="btn btn-primary" id="add-player"><i data-lucide="user-plus"></i>Add player</button>');
+    const actions =
+      (players.length ? '<button class="btn" id="new-assess"><i data-lucide="clipboard-plus"></i>New assessment</button>' : '') +
+      '<button class="btn btn-primary" id="add-player"><i data-lucide="user-plus"></i>Add player</button>';
+
+    let html = ui.pageHead('Players', players.length + ' player' + (players.length === 1 ? '' : 's') + ' · ' + pitchers + ' pitcher' + (pitchers === 1 ? '' : 's'), actions);
 
     if (!players.length) {
       html += ui.emptyState('users', 'No players yet', 'Add your first player to get started.',
@@ -162,39 +196,20 @@
       root.innerHTML = html;
       const ae = root.querySelector('#add-empty');
       if (ae) ae.addEventListener('click', function () { openForm(null); });
-    } else {
-      // Hero KPI row — answers "is everything OK?" before the grid of equals.
-      html += '<div class="stats">' +
-        ui.statTile(players.length, 'Players') +
-        ui.statTile(pitchers, 'Pitchers') +
-        ui.statTile(clearedCount(players), 'Cleared to pitch') +
-        '</div>';
-      html += '<div class="grid-cards">' +
-        players.map(function (p) { return '<div data-card="' + esc(p.id) + '">' + playerCard(p) + '</div>'; }).join('') +
-        '</div>';
-      root.innerHTML = html;
+      return;
     }
+
+    html += '<div class="grid-cards player-grid">' +
+      players.map(playerCard).join('') +
+    '</div>';
+    root.innerHTML = html;
 
     const add = root.querySelector('#add-player');
     if (add) add.addEventListener('click', function () { openForm(null); });
-
-    root.querySelectorAll('[data-act="edit"]').forEach(function (b) {
-      b.addEventListener('click', function () { openForm(store.getPlayer(b.getAttribute('data-id'))); });
-    });
-    root.querySelectorAll('[data-act="del"]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        const player = store.getPlayer(b.getAttribute('data-id'));
-        if (!player) return;
-        ui.confirmDialog('Delete player',
-          'Delete ' + player.name + ' and all their assessments, stats, workload, and programs? This cannot be undone.',
-          'Delete', function () {
-            store.deletePlayerCascade(player.id);
-            ui.toast('Player deleted');
-            CT.router.route();
-          });
-      });
-    });
+    const na = root.querySelector('#new-assess');
+    if (na) na.addEventListener('click', function () { CT.router.navigate('#/assessment'); });
   }
 
-  CT.registerView('roster', { label: 'Roster', render: render });
+  window.CT.playersUI = { openForm: openForm, confirmDelete: confirmDelete };
+  CT.registerView('players', { label: 'Players', render: render });
 })();

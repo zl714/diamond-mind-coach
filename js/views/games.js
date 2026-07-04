@@ -539,44 +539,73 @@
     return ui.card({ title: vsLabel(game), subtitle: CT.formatDate(game.date) + ' · ' + (game.homeAway === 'away' ? 'Away' : 'Home'), body: body });
   }
 
-  function renderList(root) {
+  // Games grid (rendered into the "Games" tab body of the wrapper).
+  function renderGamesList(body) {
     const games = store.all('games').slice().sort(function (a, b) {
       if (a.date !== b.date) return a.date < b.date ? 1 : -1;
       return (a.createdAt || '') < (b.createdAt || '') ? 1 : -1;
     });
-    let html = ui.pageHead('Games', games.length + ' game(s) · box scores & raw stat lines',
-      '<button class="btn btn-primary" id="new-game"><i data-lucide="plus"></i>New game</button>');
-
     if (!games.length) {
-      html += ui.emptyState('calendar-plus', 'No games yet', 'Create a game, then enter batting, pitching and fielding lines.',
+      body.innerHTML = ui.emptyState('calendar-plus', 'No games yet', 'Create a game, then enter batting, pitching and fielding lines.',
         '<button class="btn btn-primary" id="new-game-empty"><i data-lucide="plus"></i>New game</button>');
-      root.innerHTML = html;
-      const e = root.querySelector('#new-game-empty'); if (e) e.addEventListener('click', function () { openGameForm(null); });
-    } else {
-      html += '<div class="grid-cards">' + games.map(gameCard).join('') + '</div>';
-      root.innerHTML = html;
+      const e = body.querySelector('#new-game-empty'); if (e) e.addEventListener('click', function () { openGameForm(null); });
+      return;
     }
+    body.innerHTML = '<div class="grid-cards">' + games.map(gameCard).join('') + '</div>';
+    body.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { CT.router.navigate('#/games/' + b.getAttribute('data-open')); }); });
+    body.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { openGameForm(store.getById('games', b.getAttribute('data-edit'))); }); });
+    body.querySelectorAll('[data-del]').forEach(function (b) { b.addEventListener('click', function () { deleteGame(store.getById('games', b.getAttribute('data-del'))); }); });
+  }
 
+  // List view with tabs: [ Games | Season Stats ]. Season Stats hosts the season
+  // leaderboards (CT.views.season) embedded (its H1 is dropped for our "Games" one).
+  function renderListTabs(root, ctx, tab) {
+    const tabbar = '<div class="tabbar" role="tablist">' +
+      '<button class="tabbar-item' + (tab === 'games' ? ' active' : '') + '" data-gtab="games">Games</button>' +
+      '<button class="tabbar-item' + (tab === 'season' ? ' active' : '') + '" data-gtab="season">Season Stats</button>' +
+      '</div>';
+    const actions = tab === 'games'
+      ? '<button class="btn btn-primary" id="new-game"><i data-lucide="plus"></i>New game</button>' : '';
+    root.innerHTML = ui.pageHead('Games', 'Box scores, raw stat lines & season leaderboards', actions) +
+      tabbar + '<div id="games-body"></div>';
+
+    root.querySelectorAll('[data-gtab]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        const t = b.getAttribute('data-gtab');
+        if (t === tab) return;
+        CT.router.navigate(t === 'season' ? '#/games/season' : '#/games');
+      });
+    });
     const ng = root.querySelector('#new-game'); if (ng) ng.addEventListener('click', function () { openGameForm(null); });
-    root.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { CT.router.navigate('#/games/' + b.getAttribute('data-open')); }); });
-    root.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { openGameForm(store.getById('games', b.getAttribute('data-edit'))); }); });
-    root.querySelectorAll('[data-del]').forEach(function (b) { b.addEventListener('click', function () { deleteGame(store.getById('games', b.getAttribute('data-del'))); }); });
+
+    const body = root.querySelector('#games-body');
+    if (tab === 'season') {
+      if (CT.views && CT.views.season) CT.views.season.render(body, { embedded: true, navigate: ctx.navigate });
+      else body.innerHTML = ui.emptyState('bar-chart-3', 'Season stats unavailable', 'The season view failed to load.');
+    } else {
+      renderGamesList(body);
+    }
   }
 
   // ===========================================================================
   // Entry point
   // ===========================================================================
   function render(root, ctx) {
-    const game = ctx && ctx.param ? store.getById('games', ctx.param) : null;
-    if (ctx && ctx.param && !game) {
-      root.innerHTML = ui.pageHead('Games', 'Box scores & raw stat lines') +
-        ui.emptyState('search-x', 'Game not found', 'That game no longer exists.',
-          '<button class="btn btn-primary" data-act="back"><i data-lucide="arrow-left"></i>All games</button>');
-      const b = root.querySelector('[data-act="back"]'); if (b) b.addEventListener('click', function () { CT.router.navigate('#/games'); });
+    const param = ctx && ctx.param;
+    // "season" is a reserved param for the Season Stats tab; anything else is a gameId.
+    if (param && param !== 'season') {
+      const game = store.getById('games', param);
+      if (!game) {
+        root.innerHTML = ui.pageHead('Games', 'Box scores & raw stat lines') +
+          ui.emptyState('search-x', 'Game not found', 'That game no longer exists.',
+            '<button class="btn btn-primary" data-act="back"><i data-lucide="arrow-left"></i>All games</button>');
+        const b = root.querySelector('[data-act="back"]'); if (b) b.addEventListener('click', function () { CT.router.navigate('#/games'); });
+        return;
+      }
+      renderDetail(root, game);
       return;
     }
-    if (game) renderDetail(root, game);
-    else renderList(root);
+    renderListTabs(root, ctx, param === 'season' ? 'season' : 'games');
   }
 
   CT.registerView('games', { label: 'Games', render: render });

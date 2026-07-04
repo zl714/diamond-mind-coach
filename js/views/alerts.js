@@ -272,8 +272,9 @@
     alerts.forEach(function (a) { affected[a.playerId] = true; });
     const affectedCount = Object.keys(affected).length;
 
-    let html = ui.pageHead('Alerts',
-      alerts.length + ' active flag(s) · ' + red + ' critical · ' + yellow + ' caution');
+    let html = '<a class="back-link" href="#/dashboard"><i data-lucide="chevron-left"></i>Back to dashboard</a>' +
+      ui.pageHead('Alerts',
+        alerts.length + ' active flag(s) · ' + red + ' critical · ' + yellow + ' caution');
 
     html += heroBanner(red, yellow);
 
@@ -300,5 +301,8 @@
     root.innerHTML = html;
   }
 
-  CT.registerView('alerts', { label: 'Alerts', render: render });
+  // Expose the alert builder so the header bell + Dashboard can share it, and
+  // register the full page as a hidden route (reached from the bell's "View all").
+  window.CT.alerts = { build: buildAlerts };
+  CT.registerView('alerts', { label: 'Alerts', render: render, hidden: true });
 })();

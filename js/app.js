@@ -1,30 +1,35 @@
-/* app.js — application shell: view registry, nav/tab bar, and a tiny defensive
-   hash router. Loads BEFORE the view files so they can call CT.registerView() at
-   their own script-load time. Boots on DOMContentLoaded once every view has
-   registered. Each view render is wrapped in try/catch so one broken view can
-   never blank the whole app. Exposes CT.registerView and CT.router. */
+/* app.js — application shell: view registry, sidebar nav, header alerts bell, and
+   a tiny defensive hash router. Loads BEFORE the view files so they can call
+   CT.registerView() at their own script-load time. Boots on DOMContentLoaded once
+   every view has registered. Each view render is wrapped in try/catch so one broken
+   view can never blank the whole app.
+
+   NAV MODEL (2026 declutter): five primary destinations in the sidebar —
+   Dashboard, Players, Sessions, Games, Arm Safety. Secondary screens (the player
+   profile, assessment entry, the full alerts page) register with { hidden:true } so
+   they are routable but do NOT appear as nav items. "Alerts" is a bell + count badge
+   in the header that opens a dropdown panel. Legacy hashes redirect to the new ones.
+   Exposes CT.registerView, CT.router, CT.getViewRender. */
 (function () {
   'use strict';
 
   const CT = window.CT;
 
-  // Ordered list of registered views: { id, label, render }.
+  // Ordered list of registered views: { id, label, render, hidden }.
   const views = [];
   const byId = {};
   let booted = false;
 
-  // Lucide icon name per view id (sidebar nav + mobile tab bar). Unknown ids
-  // fall back to a generic glyph so a newly-added view still renders an icon.
+  // Lucide icon name per view id (sidebar nav + mobile tab bar).
   const NAV_ICONS = {
-    roster: 'users',
-    drills: 'layers',
-    lessons: 'clipboard-list',
     dashboard: 'layout-dashboard',
-    assessment: 'gauge',
-    games: 'list',
-    season: 'trending-up',
+    players: 'users',
+    sessions: 'clipboard-list',
+    games: 'diamond',
     armsafety: 'shield',
-    programs: 'dumbbell',
+    // secondary / hidden (kept for any stray icon paint)
+    player: 'user-round',
+    assessment: 'gauge',
     alerts: 'bell'
   };
   function navIcon(id) { return NAV_ICONS[id] || 'circle'; }
@@ -33,9 +38,9 @@
   function paintIcons() { try { if (window.lucide) window.lucide.createIcons(); } catch (e) {} }
 
   /**
-   * registerView(id, { label, render(rootEl, ctx) })
-   * Adds a nav tab and makes the view routable at #/<id> (and #/<id>/<param>).
-   * `render` receives the #view-root element and a ctx { param, navigate }.
+   * registerView(id, { label, render(rootEl, ctx), hidden })
+   * Adds a routable view at #/<id> (and #/<id>/<param>). Views WITHOUT hidden:true
+   * also get a sidebar nav tab. Nav order follows registration order.
    */
   function registerView(id, def) {
     if (!id || !def || typeof def.render !== 'function') {
@@ -47,12 +52,15 @@
       const i = views.findIndex(function (v) { return v.id === id; });
       if (i >= 0) views[i] = byId[id];
     } else {
-      const v = { id: id, label: def.label || id, render: def.render };
+      const v = { id: id, label: def.label || id, render: def.render, hidden: !!def.hidden };
       byId[id] = v;
       views.push(v);
     }
     if (booted) { buildNav(); }
   }
+
+  // Views that actually appear in the sidebar/bottom-bar (registration order).
+  function navViews() { return views.filter(function (v) { return !v.hidden; }); }
 
   function navigate(hash) {
     if (location.hash === hash) route();
@@ -60,20 +68,37 @@
     window.scrollTo(0, 0);
   }
 
-  // Parse "#/id/param" -> { id, param }. Defaults to the first registered view.
+  // Parse "#/id/param" -> { id, param }. Defaults to the first NAV view.
   function parseHash() {
     const h = (location.hash || '').replace(/^#\/?/, '');
     const parts = h.split('/').filter(Boolean);
-    const id = parts[0] || (views[0] ? views[0].id : '');
+    const first = navViews()[0] || views[0];
+    const id = parts[0] || (first ? first.id : '');
     const param = parts.slice(1).join('/') || null;
     return { id: id, param: param };
+  }
+
+  // Map old hashes onto the consolidated nav. Returns a replacement hash or null.
+  function legacyRedirect(parsed) {
+    const id = parsed.id, param = parsed.param;
+    switch (id) {
+      case 'roster': return '#/players' + (param ? '/' + param : '');
+      case 'drills': return '#/sessions/drills';
+      case 'programs': return '#/sessions/programs';
+      case 'season': return '#/games/season';
+      case 'dashboard':
+        // Old profile deep link (#/dashboard/<playerId>) -> new #/player/<id>.
+        if (param && CT.store.getPlayer(param)) return '#/player/' + param;
+        return null;
+      default: return null;
+    }
   }
 
   function buildNav() {
     const nav = document.getElementById('view-tabs');
     if (!nav) return;
     const current = parseHash().id;
-    nav.innerHTML = views.map(function (v) {
+    nav.innerHTML = navViews().map(function (v) {
       const active = v.id === current ? ' active' : '';
       return '<a class="tab' + active + '" href="#/' + v.id + '" data-view="' + v.id + '">' +
         '<i data-lucide="' + navIcon(v.id) + '"></i>' +
@@ -88,15 +113,20 @@
   }
 
   function route() {
+    const parsed = parseHash();
+    const redirect = legacyRedirect(parsed);
+    if (redirect) { location.replace(redirect); return; } // hashchange re-fires route()
+
     // Tear down any charts from the previous view to avoid canvas leaks.
     try { CT.charts.destroyAll(); } catch (e) {}
     const root = document.getElementById('view-root');
     if (!root) return;
-    const parsed = parseHash();
-    const view = byId[parsed.id] || views[0];
+    const view = byId[parsed.id] || navViews()[0] || views[0];
 
     buildNav();
     refreshBadge();
+    refreshAlertsBell();
+    closeAlertsPanel();
 
     if (!view) {
       root.innerHTML = CT.ui.emptyState('hammer', 'No views registered yet',
@@ -124,7 +154,101 @@
     paintIcons();
   }
 
-  // Toolbar actions (export / import / reset demo) wired once at boot.
+  // Render a registered view's content into an arbitrary container (used by the
+  // Sessions/Games wrappers to host their tabbed sub-views).
+  function getViewRender(id) { return byId[id] ? byId[id].render : null; }
+
+  // ---------------------------------------------------------------------------
+  // Header alerts bell + dropdown panel
+  // ---------------------------------------------------------------------------
+  function currentAlerts() {
+    try { return (CT.alerts && CT.alerts.build) ? CT.alerts.build() : []; }
+    catch (e) { return []; }
+  }
+
+  function refreshAlertsBell() {
+    const bell = document.getElementById('alerts-bell');
+    const badge = document.getElementById('alerts-badge');
+    if (!bell || !badge) return;
+    const alerts = currentAlerts();
+    const red = alerts.filter(function (a) { return a.severity === 'red'; }).length;
+    const n = alerts.length;
+    bell.classList.toggle('has-critical', red > 0);
+    bell.classList.toggle('has-alerts', n > 0);
+    if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? '99+' : String(n); }
+    else { badge.hidden = true; }
+  }
+
+  function alertPanelRow(a) {
+    const dot = a.severity === 'red' ? 'red' : 'yellow';
+    return '<a class="al-panel-row" href="#/' + CT.escapeHtml(a.link) + '/' + CT.escapeHtml(a.playerId) + '">' +
+      '<span class="al-panel-dot ' + dot + '"></span>' +
+      '<span class="al-panel-txt">' +
+        '<span class="al-panel-name">' + CT.escapeHtml(a.playerName) + '</span>' +
+        '<span class="al-panel-issue">' + CT.escapeHtml(a.title) + '</span>' +
+      '</span>' +
+      '<i data-lucide="chevron-right"></i></a>';
+  }
+
+  function renderAlertsPanel() {
+    const panel = document.getElementById('alerts-panel');
+    if (!panel) return;
+    const alerts = currentAlerts();
+    const red = alerts.filter(function (a) { return a.severity === 'red'; }).length;
+    let head = alerts.length
+      ? '<span class="al-panel-count">' + alerts.length + ' active · ' + red + ' critical</span>'
+      : '<span class="al-panel-count">All clear</span>';
+    let body;
+    if (!alerts.length) {
+      body = '<div class="al-panel-empty"><i data-lucide="shield-check"></i>' +
+        '<p>No pain, Pitch Smart, workload, or adherence flags right now.</p></div>';
+    } else {
+      body = '<div class="al-panel-list">' + alerts.slice(0, 6).map(alertPanelRow).join('') + '</div>';
+    }
+    panel.innerHTML =
+      '<div class="al-panel-head"><span class="al-panel-title">Alerts</span>' + head + '</div>' +
+      body +
+      '<a class="al-panel-all" href="#/alerts"><i data-lucide="list"></i>View all alerts</a>';
+    paintIcons();
+  }
+
+  function openAlertsPanel() {
+    const panel = document.getElementById('alerts-panel');
+    const bell = document.getElementById('alerts-bell');
+    if (!panel || !bell) return;
+    renderAlertsPanel();
+    panel.hidden = false;
+    bell.setAttribute('aria-expanded', 'true');
+  }
+  function closeAlertsPanel() {
+    const panel = document.getElementById('alerts-panel');
+    const bell = document.getElementById('alerts-bell');
+    if (panel) panel.hidden = true;
+    if (bell) bell.setAttribute('aria-expanded', 'false');
+  }
+  function toggleAlertsPanel() {
+    const panel = document.getElementById('alerts-panel');
+    if (panel && panel.hidden) openAlertsPanel(); else closeAlertsPanel();
+  }
+
+  function wireAlertsBell() {
+    const bell = document.getElementById('alerts-bell');
+    const panel = document.getElementById('alerts-panel');
+    if (!bell || !panel) return;
+    bell.addEventListener('click', function (e) { e.stopPropagation(); toggleAlertsPanel(); });
+    // Follow a deep link inside the panel, then close it.
+    panel.addEventListener('click', function (e) {
+      if (e.target.closest('a')) closeAlertsPanel();
+    });
+    document.addEventListener('click', function (e) {
+      if (panel.hidden) return;
+      if (!panel.contains(e.target) && !bell.contains(e.target)) closeAlertsPanel();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAlertsPanel(); });
+    refreshAlertsBell();
+  }
+
+  // Toolbar actions (export / import / reset demo / start fresh) wired once at boot.
   function wireToolbar() {
     const ex = document.getElementById('btn-export');
     const im = document.getElementById('btn-import');
@@ -140,28 +264,28 @@
     if (cl) cl.addEventListener('click', function () {
       CT.ui.confirmDialog('Start fresh',
         'Erase ALL demo players, sessions, games, drills, and programs so you can use this for your real clients? This cannot be undone — export a backup first if you want one. The app stays empty after reload.',
-        'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your real players in Roster'); route(); });
+        'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your real players in Players'); route(); });
     });
-    // Mobile quick-log '+': jump to the session-logging view once it ships
-    // (id 'lessons'), otherwise fall back to the roster.
+    // Quick-log '+': jump to Sessions (drill/session builder).
     const ql = document.getElementById('quick-log');
-    if (ql) ql.addEventListener('click', function () {
-      navigate(byId.lessons ? '#/lessons' : '#/roster');
-    });
+    if (ql) ql.addEventListener('click', function () { navigate('#/sessions'); });
   }
 
   function init() {
     CT.store.load();      // hydrate from localStorage or seed labeled demo data
     wireToolbar();
+    wireAlertsBell();
     buildNav();
     refreshBadge();
     booted = true;
     window.addEventListener('hashchange', route);
-    if (!location.hash && views[0]) location.replace('#/' + views[0].id);
+    const first = navViews()[0] || views[0];
+    if (!location.hash && first) location.replace('#/' + first.id);
     route();
   }
 
   CT.registerView = registerView;
+  CT.getViewRender = getViewRender;
   CT.router = { navigate: navigate, route: route, parseHash: parseHash, views: function () { return views.slice(); } };
 
   if (document.readyState === 'loading') {

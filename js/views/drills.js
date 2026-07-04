@@ -351,14 +351,16 @@
   // ---- render ----------------------------------------------------------------
   function render(root, ctx) {
     const players = store.getPlayers();
+    // When hosted inside the Sessions wrapper the H1 + "New drill" live upstream.
+    const embedded = !!(ctx && ctx.embedded);
 
-    let html = ui.pageHead('Drills & Sessions',
+    let html = embedded ? '' : ui.pageHead('Drills & Sessions',
       'Build a coaching session by dragging drills from the library',
       '<button class="btn btn-primary" id="add-drill-top"><i data-lucide="plus"></i>New drill</button>');
 
     if (!players.length) {
       html += ui.emptyState('users', 'No players yet',
-        'Add a player on the Roster tab first, then build their drill sessions here.');
+        'Add a player on the Players tab first, then build their drill sessions here.');
       root.innerHTML = html;
       return;
     }
@@ -367,13 +369,6 @@
     const player = store.getPlayer(sel.playerId);
     const lessons = store.lessonsForPlayer(sel.playerId);
     const lesson = sel.lessonId ? store.getLesson(sel.lessonId) : null;
-
-    // Hero KPI row — answers "is everything set up?".
-    html += '<div class="stats">' +
-      ui.statTile(store.drillLibrary().length, 'Drills in library') +
-      ui.statTile(lessons.length, 'Sessions · ' + player.name.split(' ').slice(-1)[0]) +
-      ui.statTile(lesson ? lesson.drillIds.length : 0, 'Drills in this session') +
-      '</div>';
 
     html += '<div class="drills-view drills-board">' +
       libraryHtml(lessons, player) +
@@ -442,5 +437,7 @@
     wireQuickStats(root, lesson);
   }
 
-  CT.registerView('drills', { label: 'Drills & Sessions', render: render });
+  // Hosted inside the Sessions wrapper (not a standalone nav destination).
+  window.CT.views = window.CT.views || {};
+  window.CT.views.drills = { label: 'Drills & Sessions', render: render };
 })();
