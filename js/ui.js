@@ -134,28 +134,47 @@
     return '<span class="badge" style="' + toneStyle(tone) + ';border-radius:9999px;padding:2px 8px;font-size:12px;font-weight:600;border:1px solid;">' + esc(text) + '</span>';
   }
 
-  // tone -> bg/color/border CSS, built on the design-system tokens.
-  // 'green'/'up' = positive axis, 'red'/'down' = negative axis, 'yellow'/'warn',
-  // 'accent'/'cyan' = brand accent, 'seam' = secondary coral, else neutral.
+  // tone -> bg/color/border CSS, built on the light design-system semantic
+  // quads (text / soft fill / border per tone). 'green'/'up' = positive axis,
+  // 'red'/'down' = negative axis, 'yellow'/'warn', 'accent'/'cyan' = brand,
+  // 'seam' = danger highlight, else neutral ink-alpha.
   function toneStyle(tone) {
     switch (tone) {
       case 'green':
       case 'up':
-        return 'background:var(--up-soft);color:var(--up);border-color:rgba(22,199,132,0.4);';
+        return 'background:var(--up-soft);color:var(--up);border-color:var(--up-border);';
       case 'red':
       case 'down':
-        return 'background:var(--down-soft);color:var(--down);border-color:rgba(242,54,69,0.45);';
+        return 'background:var(--down-soft);color:var(--down);border-color:var(--down-border);';
       case 'yellow':
       case 'warn':
-        return 'background:var(--warn-soft);color:var(--warn);border-color:rgba(251,191,36,0.45);';
+        return 'background:var(--warn-soft);color:var(--warn);border-color:var(--warn-border);';
       case 'accent':
       case 'cyan':
-        return 'background:var(--accent-soft);color:var(--accent-400);border-color:rgba(0,174,239,0.35);';
+        return 'background:var(--accent-soft);color:var(--accent-700,#0072A8);border-color:#B3E7FB;';
       case 'seam':
-        return 'background:var(--seam-soft,rgba(239,68,68,0.12));color:var(--seam-2,#FB7185);border-color:rgba(251,113,133,0.4);';
+        return 'background:var(--seam-soft,#FEF3F2);color:var(--seam,#DC2626);border-color:#FECDCA;';
       default:
-        return 'background:rgba(255,255,255,0.06);color:var(--text-secondary);border-color:var(--border);';
+        return 'background:rgba(15,23,42,0.05);color:var(--text-secondary);border-color:var(--border);';
     }
+  }
+
+  // diamondMeter(pct, opts?) — the app-wide percentile capsule: a --track
+  // capsule filled with the Savant gradient up to `pct`, capped by a 45deg
+  // square "diamond" thumb in the percentile's Savant color (2px white ring).
+  // The gradient is background-sized to the FULL track so the visible fill's
+  // colors always match the percentile position. opts: { small, label }.
+  function diamondMeter(pct, opts) {
+    opts = opts || {};
+    const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+    const color = (CT.charts && CT.charts.savantColor) ? CT.charts.savantColor(p) : 'var(--pct-mid)';
+    const cls = 'dm-meter' + (opts.small ? ' dm-meter-sm' : '');
+    const gradSize = p > 0 ? (10000 / p) : 100; // fill spans p%; gradient spans track
+    const aria = opts.label ? esc(opts.label) : (p + 'th percentile');
+    return '<span class="' + cls + '" role="img" aria-label="' + aria + '">' +
+      '<span class="dm-meter-fill" style="width:' + p + '%;background-size:' + gradSize + '% 100%;"></span>' +
+      '<span class="dm-meter-thumb" style="left:' + p + '%;background:' + color + ';"></span>' +
+    '</span>';
   }
 
   function statTile(num, label) {
@@ -191,6 +210,7 @@
     pill: pill,
     badge: badge,
     toneStyle: toneStyle,
+    diamondMeter: diamondMeter,
     statTile: statTile,
     emptyState: emptyState,
     pageHead: pageHead,

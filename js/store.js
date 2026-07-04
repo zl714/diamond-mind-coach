@@ -108,14 +108,14 @@
         console.warn('Coach Tracker: stored data invalid — reseeding demo.');
       }
     }
-    // No valid stored data — seed clearly-labeled demo data so no view is ever blank.
-    state = withSeededBenchmarks(normalize(CT.buildSampleData()));
+    // No valid stored data — boot EMPTY (views render designed empty states +
+    // first-run onboarding; there is no demo seed anymore).
+    state = withSeededBenchmarks(emptyState());
     persist();
     return state;
   }
 
   function getState() { if (!state) load(); return state; }
-  function isUsingSample() { return !!(state && state.isSample); }
 
   // Any user write clears the sample flag (demo badge disappears).
   function commit(nextCollections, opts) {
@@ -245,13 +245,6 @@
     return state;
   }
 
-  function resetToSample() {
-    state = withSeededBenchmarks(normalize(CT.buildSampleData()));
-    persist();
-    emit();
-    return state;
-  }
-
   function clearAll() {
     state = withSeededBenchmarks(emptyState());
     persist();
@@ -266,7 +259,6 @@
     APPEND_ONLY: APPEND_ONLY,
     load: load,
     getState: getState,
-    isUsingSample: isUsingSample,
     subscribe: subscribe,
     // queries
     all: all,
@@ -295,7 +287,6 @@
     // bulk
     exportAll: exportAll,
     importAll: importAll,
-    resetToSample: resetToSample,
     clearAll: clearAll,
     deepClone: deepClone
   };

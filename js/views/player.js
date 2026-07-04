@@ -122,14 +122,14 @@
     return { grade: grade, avgPct: Math.round(avg), band: band, n: tools.length };
   }
 
-  // Signed-delta tone — CYAN for improvement, SEAM/coral for decline (NO green).
+  // Signed-delta tone — OK-green for improvement, danger red for decline.
   // For "lower is better" metrics a numeric DROP is an improvement.
   function deltaParts(net, lowerBetter, raw) {
     const improved = lowerBetter ? net < 0 : net > 0;
     let color, bg, glyph;
-    if (net === 0) { color = 'var(--text-muted)'; bg = 'rgba(255,255,255,0.06)'; glyph = 'minus'; }
-    else if (improved) { color = 'var(--accent-400)'; bg = 'var(--accent-soft)'; glyph = 'arrow-up-right'; }
-    else { color = 'var(--seam-2)'; bg = 'var(--seam-soft,rgba(239,68,68,0.12))'; glyph = 'arrow-down-right'; }
+    if (net === 0) { color = 'var(--text-muted)'; bg = 'rgba(15,23,42,0.05)'; glyph = 'minus'; }
+    else if (improved) { color = 'var(--up)'; bg = 'var(--up-soft)'; glyph = 'arrow-up-right'; }
+    else { color = 'var(--seam,#DC2626)'; bg = 'var(--seam-soft,#FEF3F2)'; glyph = 'arrow-down-right'; }
     const sign = net > 0 ? '+' : (net < 0 ? MINUS : '');
     const mag = raw ? Math.abs(net) : round1(Math.abs(net));
     return { color: color, bg: bg, glyph: glyph, sign: sign, mag: mag };
@@ -139,7 +139,7 @@
     if (!g) return ui.badge('Unrated', 'neutral');
     const base = ';border-radius:9999px;padding:2px 8px;font-size:12px;font-weight:600;border:1px solid;';
     if (g.band === 'plus') {
-      return '<span class="badge" style="' + ui.toneStyle('seam') + base + '"><i data-lucide="star"></i>Plus tools</span>';
+      return '<span class="badge" style="' + ui.toneStyle('accent') + base + '"><i data-lucide="star"></i>Plus tools</span>';
     }
     const label = g.band === 'average' ? 'Average' : 'Developing';
     const icon = g.band === 'average' ? 'minus' : 'trending-up';
@@ -213,12 +213,10 @@
     }
     const rows = tools.map(function (t) {
       const pctR = Math.round(t.pct);
-      const color = charts.savantColor(pctR);
       const valStr = round1(t.value) + (t.unit === '%' ? '%' : (t.unit ? ' ' + t.unit : ''));
       return '<div class="dm-tool">' +
         '<span class="tname">' + esc(t.label) + '</span>' +
-        '<span class="pct-bar" role="img" aria-label="' + esc(t.label + ': ' + pctR + 'th percentile') + '">' +
-          '<span style="width:' + pctR + '%;background:' + color + ';"></span></span>' +
+        ui.diamondMeter(pctR, { label: t.label + ': ' + pctR + 'th percentile' }) +
         '<span class="tval num">' + esc(valStr) + '</span>' +
         '<span class="tpct num">' + pctR + '</span>' +
       '</div>';
@@ -251,7 +249,7 @@
       if (!cv) return;
       const ds = [{ label: m.label + ' (' + m.unit + ')', data: readings.map(function (r) { return r.value; }), fill: true }];
       if (bench && bench.p50 != null) {
-        ds.push({ label: 'Age-band median', data: readings.map(function () { return bench.p50; }), color: charts.THEME.seam2, fill: false });
+        ds.push({ label: 'Age-band median', data: readings.map(function () { return bench.p50; }), color: charts.THEME.median, dash: true, fill: false });
       }
       charts.line(cv, { labels: readings.map(function (r) { return CT.formatDate(r.date); }), datasets: ds });
     });
@@ -272,7 +270,7 @@
     }
 
     const youthNote = (m.youthNA && band && model.AGE_BANDS.indexOf(band) <= 2)
-      ? '<div class="dash-note" style="color:var(--seam-2);">Generally N/A for youth — interpret as exploratory only.</div>' : '';
+      ? '<div class="dash-note" style="color:var(--warn);">Generally N/A for youth — interpret as exploratory only.</div>' : '';
 
     const body =
       '<div class="pill-row" style="margin-bottom:var(--sp-3);">' + indicators + '</div>' +
@@ -437,7 +435,7 @@
       });
       const typeLabel = a.type === 'showcase' ? 'Showcase' : (a.type === 'practice' ? 'Practice assessment' : 'Assessment');
       events.push({
-        date: a.date, sort: a.date + '_2', dot: 'var(--seam-2)',
+        date: a.date, sort: a.date + '_2', dot: 'var(--accent-400)',
         title: typeLabel + ' logged',
         outcome: (a.location ? a.location + ' · ' : '') + rs.length + ' metric' + (rs.length === 1 ? '' : 's') + ' captured',
         deltas: deltas.slice(0, 4)

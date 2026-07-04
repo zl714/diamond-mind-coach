@@ -293,7 +293,7 @@
 
     if (youth) {
       html += ui.card({ className: 'season-note', body:
-        '<p class="note" style="margin:0;"><strong style="color:var(--accent-400);">Youth development view.</strong> ' +
+        '<p class="note" style="margin:0;"><strong style="color:var(--accent-700);">Youth development view.</strong> ' +
         'On-base, walk, strikeout, quality-at-bat and strike rates (highlighted) are the high-signal process numbers — read them as trends, not pass/fail. ' +
         'AVG and RBI are noisy at this level and de-emphasized. These tables are private coaching tools, not public rankings.</p>' });
     }

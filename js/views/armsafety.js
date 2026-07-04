@@ -16,11 +16,11 @@
   // Workload-type buckets -> chart series + colors, sourced from the DM theme.
   // Cyan = brand accent; seam-red = Pitch Smart required-rest highlight; gold = ACWR.
   const COLORS = {
-    game: charts.THEME.accent,              // brand cyan (primary series)
+    game: '#00AEEF',                        // brand cyan (primary series)
     bullpen: 'rgba(0,174,239,0.45)',        // lighter cyan
-    other: 'rgba(148,163,184,0.55)',        // neutral slate
-    rest: 'rgba(239,68,68,0.13)',           // seam-tinted required-rest shading
-    acwr: charts.THEME.warn                 // amber (caution axis)
+    other: 'rgba(100,116,139,0.45)',        // neutral slate (ink-keyed for light)
+    rest: 'rgba(220,38,38,0.08)',           // danger-tinted required-rest shading
+    acwr: '#B45309'                         // amber TEXT tone (readable on white)
   };
 
   // ----- helpers -----
@@ -102,9 +102,9 @@
 
   function kpiGrid(v) {
     const capPct = Math.min(100, (v.rolling12moInnings / v.inningsCap) * 100);
-    const capColor = v.overInningsCap ? 'var(--seam)' : 'var(--accent-400)';
-    const remColor = v.remainingToday <= 0 ? 'var(--seam)' : 'var(--accent-400)';
-    const streakColor = v.consecutiveStreak >= 3 ? 'var(--seam)' : 'var(--accent-400)';
+    const capColor = v.overInningsCap ? 'var(--seam)' : 'var(--accent-700)';
+    const remColor = v.remainingToday <= 0 ? 'var(--seam)' : 'var(--accent-700)';
+    const streakColor = v.consecutiveStreak >= 3 ? 'var(--seam)' : 'var(--accent-700)';
     const acwrRatio = v.acwr.ratio != null ? v.acwr.ratio.toFixed(2) : '—';
     const last = v.lastOuting
       ? CT.relativeDate(v.lastOuting.date) + ' · ' + v.lastOuting.pitches + ' pitch'

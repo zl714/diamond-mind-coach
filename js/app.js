@@ -107,11 +107,6 @@
     paintIcons();
   }
 
-  function refreshBadge() {
-    const badge = document.getElementById('demo-badge');
-    if (badge) badge.hidden = !CT.store.isUsingSample();
-  }
-
   function route() {
     const parsed = parseHash();
     const redirect = legacyRedirect(parsed);
@@ -124,7 +119,6 @@
     const view = byId[parsed.id] || navViews()[0] || views[0];
 
     buildNav();
-    refreshBadge();
     refreshAlertsBell();
     closeAlertsPanel();
 
@@ -248,23 +242,17 @@
     refreshAlertsBell();
   }
 
-  // Toolbar actions (export / import / reset demo / start fresh) wired once at boot.
+  // Toolbar actions (export / import / start fresh) wired once at boot.
   function wireToolbar() {
     const ex = document.getElementById('btn-export');
     const im = document.getElementById('btn-import');
-    const rs = document.getElementById('btn-reset');
     if (ex) ex.addEventListener('click', function () { CT.io.exportJSON(); });
     if (im) im.addEventListener('click', function () { CT.io.importJSON(function () { route(); }); });
-    if (rs) rs.addEventListener('click', function () {
-      CT.ui.confirmDialog('Reset demo data',
-        'Replace ALL current data with the fictional demo dataset? This cannot be undone.',
-        'Reset to demo', function () { CT.store.resetToSample(); CT.ui.toast('Demo data restored'); route(); });
-    });
     const cl = document.getElementById('btn-clear');
     if (cl) cl.addEventListener('click', function () {
       CT.ui.confirmDialog('Start fresh',
-        'Erase ALL demo players, sessions, games, drills, and programs so you can use this for your real clients? This cannot be undone — export a backup first if you want one. The app stays empty after reload.',
-        'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your real players in Players'); route(); });
+        'Erase ALL players, sessions, games, drills, and programs? This cannot be undone — export a backup first if you want one.',
+        'Erase everything', function () { CT.store.clearAll(); CT.ui.toast('Cleared — add your players in Players'); route(); });
     });
     // Quick-log '+': jump to Sessions (drill/session builder).
     const ql = document.getElementById('quick-log');
@@ -272,11 +260,10 @@
   }
 
   function init() {
-    CT.store.load();      // hydrate from localStorage or seed labeled demo data
+    CT.store.load();      // hydrate from localStorage (or boot empty)
     wireToolbar();
     wireAlertsBell();
     buildNav();
-    refreshBadge();
     booted = true;
     window.addEventListener('hashchange', route);
     const first = navViews()[0] || views[0];

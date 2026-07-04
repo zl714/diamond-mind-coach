@@ -146,7 +146,7 @@
       store.byPlayer('assessmentSessions', p.id).forEach(function (a) {
         const rs = store.byPlayer('metricReadings', p.id).filter(function (r) { return r.assessmentSessionId === a.id && !r.voided; });
         const typeLabel = a.type === 'showcase' ? 'showcase' : 'assessment';
-        events.push({ date: a.date, sort: a.date + '_3', dot: 'var(--seam-2)', pid: p.id,
+        events.push({ date: a.date, sort: a.date + '_3', dot: 'var(--accent-400)', pid: p.id,
           title: p.name + ' — ' + typeLabel + ' logged', outcome: (a.location ? a.location + ' · ' : '') + rs.length + ' metric' + (rs.length === 1 ? '' : 's') + ' captured' });
       });
       const c = latestCheckIn(p.id);
@@ -197,18 +197,59 @@
     return html + '</div>';
   }
 
+  // ---------- first-run onboarding (hero + 3-step checklist) ----------
+  // Driven LIVE by store counts (no stored wizard state): steps check off as
+  // real data appears, and the whole block retires once the program is rolling.
+  function onboardStep(n, done, locked, href, title, sub, icon) {
+    const cls = 'onboard-step' + (done ? ' done' : '') + (locked ? ' locked' : '');
+    const num = done ? '<i data-lucide="check"></i>' : String(n);
+    const tag = locked ? 'div' : 'a';
+    return '<' + tag + ' class="' + cls + '"' + (locked ? '' : ' href="' + href + '"') + '>' +
+      '<span class="onboard-num">' + num + '</span>' +
+      '<span class="onboard-body">' +
+        '<span class="onboard-title">' + esc(title) + '</span>' +
+        '<span class="onboard-sub">' + esc(sub) + '</span>' +
+      '</span>' +
+      (done ? '' : '<span class="onboard-go"><i data-lucide="' + (locked ? 'lock' : 'arrow-right') + '"></i></span>') +
+    '</' + tag + '>';
+  }
+
+  function onboardingHtml(players) {
+    const hasPlayers = players.length > 0;
+    const hasAssessment = store.all('assessmentSessions').length > 0;
+    const hasProgram = store.all('programAssignments').length > 0;
+    return ui.pageHead('Dashboard', 'Your program at a glance') +
+      '<div class="dash-hero" style="' + ui.toneStyle('accent') + '">' +
+        '<span class="dash-hero-icon"><i data-lucide="sparkles"></i></span>' +
+        '<div class="dash-hero-text"><div class="dash-hero-status">' +
+          (hasPlayers ? 'Almost rolling — finish setup' : 'Welcome to Diamond Mind') + '</div>' +
+        '<div class="dash-hero-sub">' +
+          (hasPlayers
+            ? 'Your roster is started. Run a first assessment and assign a program to unlock the full dashboard.'
+            : 'Add your first player to start tracking development, sessions, games, and arm safety.') +
+        '</div></div>' +
+        (hasPlayers ? '' : '<a class="btn btn-sm dash-hero-cta" href="#/players"><i data-lucide="user-plus"></i>Add a player</a>') +
+      '</div>' +
+      '<div class="onboard-steps">' +
+        onboardStep(1, hasPlayers, false, '#/players', 'Add a player',
+          'Name, birthdate, and positions — age bands drive benchmarks and Pitch Smart limits.') +
+        onboardStep(2, hasAssessment, !hasPlayers, '#/assessment', 'Run a first assessment',
+          'Capture exit velo, throwing velo, and speed to baseline every player.') +
+        onboardStep(3, hasProgram, !hasPlayers, '#/sessions/programs', 'Assign a program',
+          'Arm care, long toss, or strength — adherence shows up here automatically.') +
+      '</div>';
+  }
+
   // ---------- main render ----------
   function render(root, ctx) {
     const players = store.getPlayers();
 
-    if (!players.length) {
-      root.innerHTML = ui.pageHead('Dashboard', 'Your program at a glance') +
-        '<div class="dash-hero" style="' + ui.toneStyle('accent') + '">' +
-          '<span class="dash-hero-icon"><i data-lucide="sparkles"></i></span>' +
-          '<div class="dash-hero-text"><div class="dash-hero-status">Welcome to Diamond Mind</div>' +
-          '<div class="dash-hero-sub">Add your players to start tracking development, sessions, games, and arm safety.</div></div>' +
-          '<a class="btn btn-sm dash-hero-cta" href="#/players"><i data-lucide="user-plus"></i>Add players</a>' +
-        '</div>';
+    // First-run: no players yet, or a fresh roster with no logged activity.
+    const fresh = !players.length ||
+      (!store.all('assessmentSessions').length && !store.all('programAssignments').length &&
+       !store.all('games').length && !store.all('lessons').length);
+    if (fresh) {
+      root.innerHTML = onboardingHtml(players);
       return;
     }
 

@@ -10,7 +10,7 @@
   'use strict';
 
   const CT = window.CT;
-  const ui = CT.ui, store = CT.store, model = CT.model, charts = CT.charts, esc = CT.escapeHtml;
+  const ui = CT.ui, store = CT.store, model = CT.model, esc = CT.escapeHtml;
 
   // Session-level context choices (sanitized per-metric on save — see resolveContext).
   const ASMT_CONTEXTS = ['tee', 'front-toss', 'machine', 'live-bp', 'bullpen', 'game', 'practice', 'test'];
@@ -72,14 +72,13 @@
     return rows;
   }
 
-  // Percentile rendered as a Baseball-Savant diverging bar (cold -> mid -> hot via
-  // charts.savantColor) — the DM analytics treatment, NOT a green pass/fail color.
-  // Label is tabular-nums and paired with the bar so it survives grayscale.
+  // Percentile rendered as the app-wide Diamond Capsule meter (Savant diverging
+  // gradient + diamond thumb) — the DM analytics treatment, NOT a green pass/fail
+  // color. Label is tabular-nums and paired with the meter so it survives grayscale.
   function pctBar(pct) {
-    const color = charts.savantColor(pct);
     return '<div class="asmt-pct">' +
       '<span class="asmt-pct-label num">P' + esc(String(pct)) + '</span>' +
-      '<span class="pct-bar"><span style="width:' + pct + '%;background:' + color + ';"></span></span>' +
+      ui.diamondMeter(pct, { small: true, label: pct + 'th percentile' }) +
       '</div>';
   }
 

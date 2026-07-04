@@ -34,7 +34,7 @@
   // ----- small helpers ---------------------------------------------------------
   function isPitcher(p) { return (p.positions || []).some(function (x) { return /pitch/i.test(x); }); }
 
-  function cleanName(name) { return (name || '').replace(/^Demo — /, ''); }
+  function cleanName(name) { return name || ''; } // demo prefixes no longer exist
 
   function programById(programId) { return store.getById('programs', programId); }
 

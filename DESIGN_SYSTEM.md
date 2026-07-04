@@ -169,3 +169,51 @@ DECISION: Left sidebar nav (240px fixed) on desktop for BOTH apps — they are d
 - Centered numeric columns or left-aligned prices; verbose absolute timestamps ('2026-06-29 14:32:07') given equal weight to content. Right-align numbers, use muted relative time ('3h') with absolute on hover.
 - Generic centered hero + identical 3-column 'icon-in-rounded-square + title + two gray lines' feature grid. Lead with one real hero number and a hierarchy of unequal tiles instead.
 - Bounce/elastic easing and spinner-only loading. Crisp 120-150ms ease-out micro-interactions + skeletons that match the final layout, with a prefers-reduced-motion guard.
+
+
+---
+
+# Diamond Mind v3 — LIGHT "Clinic" theme (2026-07)
+
+Diamond Mind moved to a light theme; the dark spec above remains the MarketLens reference. Key rules of the light system (source of truth: `css/styles.css` `:root` + `[data-app="diamond-mind"]`):
+
+## Surfaces — elevation is SHADOW, never lightness; wells go DARKER
+```css
+--bg-base: #F8F9FB;      /* canvas */
+--bg-sunken: #F1F3F7;    /* input / chart wells */
+--surface-1: #FFFFFF;    /* sidebar rail (+1px border-right) */
+--surface-2: #FFFFFF;    /* cards */
+--surface-3: #F4F6F9;    /* hover fills, chips */
+--surface-4: #EDF0F5;    /* pressed / tracks */
+--surface-raised: #FFFFFF; /* modals/popovers/dropdowns — pair with --shadow-pop/--shadow-modal */
+--track: #E9EDF2;        /* all meter / pct-bar tracks */
+```
+
+## Ink
+`--text-hi #0F172A` headings/hero numbers · `--text-strong #1E293B` · `--text-body #334155` · `--text-secondary #64748B` (labels, 4.76:1 floor) · `--text-muted #94A3B8` (captions/placeholders/disabled ONLY — never data or body copy).
+
+## Borders (ink-alpha)
+`--border-strong #CBD5E1` (inputs) · `--border rgba(15,23,42,0.10)` · `--border-subtle .06` · `--divider .05` · `--rim-light` is now a BOTTOM rim: `inset 0 -1px 0 rgba(15,23,42,0.04)`.
+
+## Accent — cyan kept, roles split (#00AEEF fails 4.5:1 on white)
+- `--accent-500 #00AEEF` = BRAND only (logo tile, chart primary series, selected-tab underline, active-nav border) — non-text.
+- `--accent-700 #0072A8` = TEXT (links, active nav label, `.btn-primary` fill with #FFF at 5.3:1); `--accent-800 #005E8C` pressed.
+- `--accent-400 #22B8F0` hover borders/icons (3:1 non-text); `--accent-soft #E6F7FE` selected/chips; `--accent-wash rgba(0,174,239,0.08)`.
+
+## Semantic quads (text / fill / soft / border) — red means DANGER ONLY
+- OK: `#15803D / #16A34A / #ECFDF3 / #ABEFC6`
+- WARN: `#B45309 / #F59E0B / #FFFAEB / #FEDF89` (never #FBBF24 as text on white)
+- DANGER: `#DC2626 / #EF4444 / #FEF3F2 / #FECDCA`
+- `[data-app="diamond-mind"]` keeps redefining `--seam #DC2626 / --seam-2 #EF4444 / --seam-soft #FEF3F2` (the `var(--seam,…)` fallbacks depend on it). Chart median overlays are dashed `#94A3B8`, not red.
+
+## Savant ramp
+`--pct-cold #3D6FB4 · --pct-mid #98A2AE · --pct-hot #D22D49`; bars/meters always sit on `--track`.
+
+## Shadows / radii / motion
+Slate-keyed shadows (`--shadow-xs/card/pop/modal`, scrim `rgba(15,23,42,0.40)`). Radii bumped: chip 6 / control 8 / card 12 / panel 14 / modal 16. Card padding 24; whitespace IS the aesthetic. Motion stays 120–200ms `--ease` only; no count-ups or sweeps.
+
+## Chart.js
+`js/charts.js` THEME is a static mirror of these tokens (Chart.js can't read CSS vars): ink text/ticks, `rgba(15,23,42,0.06)` grid, and a deliberately DARK tooltip (`#0F172A` bg, `#F8FAFC` text) — the one dark survivor.
+
+## Signature component
+`ui.diamondMeter(pct)` — the Diamond Capsule: `--track` capsule, Savant-gradient fill sized to the full track, 45°-rotated square thumb ("baseball diamond") in the percentile's Savant color with a 2px white ring. 10px default, 6px compact. Replaces `.pct-bar` everywhere.

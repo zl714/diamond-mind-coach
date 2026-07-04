@@ -7,25 +7,29 @@
 
   const CT = window.CT;
 
-  // Themed from the LeCroy Design System tokens (Diamond Mind cyan accent +
-  // seam-red secondary, separate semantic up/down axis, Savant diverging scale).
+  // Themed for the LIGHT LeCrey/Diamond Mind design system. Chart.js cannot
+  // read CSS custom properties, so this is a static mirror of the token block.
+  // The tooltip deliberately stays dark ink (#0F172A) — the one dark survivor.
   const THEME = {
     accent: '#00AEEF',                  // brand cyan (primary series)
-    accentFill: 'rgba(0,174,239,0.16)',
-    seam: '#EF4444',                    // secondary data accent (coral/red seam)
-    seam2: '#FB7185',
-    text: '#E2E8F0',
-    tick: '#94A3B8',
-    grid: 'rgba(255,255,255,0.06)',
-    panel: '#0F172A',
-    border: 'rgba(255,255,255,0.08)',
-    up: '#16C784',                      // positive axis
-    down: '#F23645',                    // negative axis
-    danger: '#F23645',
-    warn: '#FBBF24',
-    // Baseball-Savant diverging percentile scale (cold -> mid -> hot)
-    pctCold: '#5181B8',
-    pctMid: '#C9CDD4',
+    accentFill: 'rgba(0,174,239,0.10)',
+    seam: '#DC2626',                    // danger red (light-tuned)
+    seam2: '#EF4444',
+    median: '#94A3B8',                  // dashed neutral median overlays
+    text: '#334155',                    // legend labels (ink)
+    tick: '#64748B',
+    grid: 'rgba(15,23,42,0.06)',
+    panel: '#0F172A',                   // tooltip bg (dark on light UI)
+    tooltipText: '#F8FAFC',
+    border: 'rgba(15,23,42,0.10)',
+    up: '#16A34A',                      // positive axis (fill green)
+    down: '#EF4444',                    // negative axis
+    danger: '#EF4444',
+    warn: '#F59E0B',
+    // Baseball-Savant diverging percentile scale (cold -> mid -> hot);
+    // mid darkened so it stays visible on white cards.
+    pctCold: '#3D6FB4',
+    pctMid: '#98A2AE',
     pctHot: '#D22D49'
   };
 
@@ -57,14 +61,20 @@
     if (canvas.parentNode) canvas.parentNode.appendChild(note);
   }
 
-  // Base options merged into every chart for the dark-green theme.
+  // Base options merged into every chart for the light theme.
   function baseOptions(extra) {
     const o = {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { labels: { color: THEME.text } },
-        tooltip: { backgroundColor: THEME.panel, borderColor: THEME.border, borderWidth: 1 }
+        tooltip: {
+          backgroundColor: THEME.panel,
+          titleColor: THEME.tooltipText,
+          bodyColor: THEME.tooltipText,
+          borderColor: THEME.border,
+          borderWidth: 1
+        }
       },
       scales: {
         x: { ticks: { color: THEME.tick }, grid: { color: THEME.grid } },
@@ -92,7 +102,7 @@
     return track(new window.Chart(canvas.getContext('2d'), cfg));
   }
 
-  // line(canvas, { labels, datasets:[{label,data,color}], yTitle })
+  // line(canvas, { labels, datasets:[{label,data,color,dash}], yTitle })
   function line(canvas, spec) {
     spec = spec || {};
     const datasets = (spec.datasets || []).map(function (d, i) {
@@ -103,7 +113,8 @@
         borderColor: color,
         backgroundColor: d.fill ? THEME.accentFill : color,
         pointBackgroundColor: color,
-        pointRadius: 4, pointHoverRadius: 6, borderWidth: 2, tension: 0.25,
+        pointRadius: d.dash ? 0 : 4, pointHoverRadius: 6, borderWidth: 2, tension: 0.25,
+        borderDash: d.dash ? [6, 4] : undefined,
         fill: !!d.fill, spanGaps: true
       };
     });

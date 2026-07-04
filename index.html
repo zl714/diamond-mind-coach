@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#030712" />
+  <meta name="theme-color" content="#F8F9FB" />
   <meta name="description" content="Diamond Mind — baseball player-development platform: roster, drill library, coaching sessions, assessments, games, season stats, Pitch Smart arm safety, and training programs." />
   <title>Diamond Mind</title>
 
@@ -24,10 +24,9 @@
   <div class="app-shell">
     <!-- Left sidebar rail (desktop) / bottom tab bar (mobile) -->
     <aside class="sidebar">
-      <a class="brand" href="#/roster" aria-label="Diamond Mind home">
-        <img class="brand-logo" src="assets/diamond-mind-logo.png" alt="Diamond Mind" />
-        <span class="brand-name">Diamond Mind</span>
-        <span id="demo-badge" class="demo-badge" hidden>Demo data</span>
+      <a class="brand" href="#/dashboard" aria-label="Diamond Mind home">
+        <span class="brand-tile"><i data-lucide="diamond"></i></span>
+        <span class="brand-name">Diamond Mind<small>Player development</small></span>
       </a>
 
       <!-- Nav: built dynamically by the router from registered views -->
@@ -36,8 +35,7 @@
       <div class="sidebar-tools">
         <button id="btn-export" class="btn btn-sm btn-ghost" type="button" title="Export all data as JSON"><i data-lucide="download"></i>Export</button>
         <button id="btn-import" class="btn btn-sm btn-ghost" type="button" title="Import data from JSON"><i data-lucide="upload"></i>Import</button>
-        <button id="btn-reset" class="btn btn-sm btn-ghost" type="button" title="Reset to demo data"><i data-lucide="rotate-ccw"></i>Reset demo</button>
-        <button id="btn-clear" class="btn btn-sm btn-ghost" type="button" title="Erase all clients and data to start using it for real"><i data-lucide="trash-2"></i>Start fresh</button>
+        <button id="btn-clear" class="btn btn-sm btn-ghost" type="button" title="Erase all data and start over"><i data-lucide="trash-2"></i>Start fresh</button>
         <p class="sidebar-foot">Data stays in your browser (localStorage). Youth-safety first (Pitch Smart).</p>
       </div>
     </aside>
@@ -86,7 +84,6 @@
   <script src="js/programs-data.js"></script>
   <script src="js/stats.js"></script>
   <script src="js/pitchsmart.js"></script>
-  <script src="js/sample-data.js"></script>
   <script src="js/store.js"></script>
   <script src="js/io.js"></script>
   <script src="js/ui.js"></script>
