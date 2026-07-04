@@ -335,6 +335,9 @@
 
   function init() {
     CT.store.load();      // hydrate from localStorage (or boot empty)
+    // Seed the canonical drill library (insert-if-missing; coach edits and
+    // deletions are respected — see drills-seed.js).
+    try { if (CT.seeds) CT.seeds.ensure(); } catch (e) { console.warn('Drill seeding failed:', e); }
     wireToolbar();
     wireAlertsBell();
     wireQuickAdd();

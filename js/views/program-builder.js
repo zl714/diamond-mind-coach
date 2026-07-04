@@ -290,8 +290,23 @@
       return;
     }
 
+    // Generated programs stay fully editable — the banner just says where the
+    // plan came from and that the coach's edits are kept.
+    let genBanner = '';
+    if (!isNew && draft.source === 'generated' && draft.generatorMeta) {
+      const gm = draft.generatorMeta;
+      const genPlayer = gm.playerId ? store.getPlayer(gm.playerId) : null;
+      const genGoal = (CT.generatorData && (CT.generatorData.GOALS.find(function (g) { return g.id === draft.goalId; }) || {}).label) || draft.goalId || 'goal';
+      genBanner = '<div class="gen-banner"><i data-lucide="wand-sparkles"></i><span>' +
+        'Generated for <strong>' + esc(genPlayer ? genPlayer.name : 'a player') + '</strong> (' +
+        esc(gm.ageBand || '—') + ', ' + esc(genGoal) + ') on ' + esc(CT.formatDate((gm.generatedAt || '').slice(0, 10))) +
+        ' — your edits are kept.' + (gm.why ? '<span class="muted gen-banner-why">' + esc(gm.why) + '</span>' : '') +
+        '</span></div>';
+    }
+
     root.innerHTML =
       '<a class="back-link" href="#/programs"><i data-lucide="chevron-left"></i>All programs</a>' +
+      genBanner +
       ui.pageHead(isNew ? 'New program' : 'Edit program',
         'Week × day plan — drag drills in, add free-text steps, set sets × reps',
         '<button class="btn btn-ghost" id="pb-discard"><i data-lucide="x"></i>Discard</button>' +

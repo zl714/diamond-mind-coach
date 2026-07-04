@@ -231,14 +231,16 @@
     const assigns = store.byPlayer('programAssignments', player.id)
       .filter(function (a) { return a.status !== 'completed'; });
     const adhocBtn = '<button class="btn btn-sm" data-act="prof-adhoc"><i data-lucide="clipboard-plus"></i>Log lesson</button>';
+    const genBtn = '<a class="btn btn-sm btn-primary" href="#/generate/' + esc(player.id) + '"><i data-lucide="wand-sparkles"></i>Build program</a>';
 
     if (!assigns.length) {
       return ui.card({
         title: 'Training program',
         subtitle: 'No active program',
-        actions: adhocBtn,
-        body: '<p class="muted" style="margin:0;">Assign an arm-care, throwing, hitting, or strength block in ' +
-          '<a href="#/programs">Programs</a> to track weekly adherence here.</p>'
+        actions: adhocBtn + ' ' + genBtn,
+        body: '<p class="muted" style="margin:0;">Generate an age-safe throwing, hitting, or strength block with ' +
+          '<a href="#/generate/' + esc(player.id) + '">Build program</a> — or assign one manually in ' +
+          '<a href="#/programs">Programs</a>.</p>'
       });
     }
 
@@ -280,7 +282,7 @@
     return ui.card({
       title: 'Training program',
       subtitle: assigns.length + ' active assignment' + (assigns.length === 1 ? '' : 's'),
-      actions: adhocBtn + ' <a class="btn btn-sm" href="#/programs"><i data-lucide="arrow-right"></i>Programs</a>',
+      actions: adhocBtn + ' ' + genBtn + ' <a class="btn btn-sm" href="#/programs"><i data-lucide="arrow-right"></i>Programs</a>',
       body: rows
     });
   }

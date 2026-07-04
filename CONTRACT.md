@@ -70,6 +70,7 @@ so `CT.registerView` exists when they run. **Registration order = sidebar order.
 | `#/programs/drills` | drill library CRUD tab |
 | `#/programs/new`, `#/programs/edit/<id>` | program builder (week × day grid) |
 | `#/programs/<programId>` | program detail (read grid + assign) — unknown params fall back to the list |
+| `#/generate/<playerId>` | program generator wizard (goal → schedule/gates → preview → create & assign) |
 | `#/games`, `#/games/<id>`, `#/games/season` | games / box score / season stats |
 | `#/armsafety[/<pid>]` | Pitch Smart console (all arms / one arm) |
 | `#/armsafety/checkin` | daily check-in (arm-health data lives here) |
@@ -168,6 +169,44 @@ programs.dayFor(program, weekIndex, dayIndex)  // exact -> week-1 pattern -> day
 Templates are offered as "Start from template" in the **program builder** and only
 persisted when the coach saves. Adherence = logged days vs due count (no stale
 pre-generated sessions).
+
+## 4b. `CT.seeds` + `CT.generatorData` + `CT.generator` — seeded library & generator
+
+- **`CT.seeds`** (drills-seed.js): 59 canonical drills with FIXED ids
+  (`drl_seed_<slug>`). `ensure()` runs once at boot (insert-if-missing, stamps
+  `settings.drillSeedVersion`; coach edits/deletes respected).
+  `ensureSlugs(slugs)` is the generator's self-heal (re-inserts deleted seeds a
+  generated program references, ignoring the version stamp). `bySlug(slug)` /
+  `idFor(slug)`.
+- **`CT.generatorData`** (generator-data.js): the decision table as DATA only —
+  `GOALS` (9, across throwing/hitting/strength), `VARIANTS[goalId]` matched on
+  EXACT age (+ optional `season:'in'` rows), `PATTERNS` (fixed weekday layouts so
+  high days are never adjacent), `DIST_CAP` per band, `RULES_VERSION`.
+- **`CT.generator`** (generator.js) — pure planning engine, console-testable:
+
+```js
+generator.eligibility(player, goalId, {inSeason, injury})
+  // { status:'ok'|'locked', reason, substituteGoalId?, variant?, confirms[], warnings[] }
+generator.recommend(player)      // percentile-driven goal per domain + reasons
+generator.generate(player, { goalId, weeks, daysPerWeek, startDate, inSeason,
+                             longLayoff, injury, confirmations })
+  // -> plan { ok, program, assignment, warnings[], why, slugs[] }  (NO writes)
+  //    | { ok:false, blocked, reason, substituteGoalId? | needsConfirms[] }
+generator.commit(player, plan)   // seeds.ensureSlugs + insert program (source
+                                 // 'generated') + active assignment + persist
+                                 // confirmed Player.readiness flags
+generator.audit(plan)            // machine-checkable safety invariants -> violations[]
+```
+
+Hard rules the engine enforces (and `audit()` re-verifies): thr-velo locked
+under 13 (substitute thr-base); drill age gates (weighted balls 15+ w/ maturity
+confirm, run-and-gun 17+, OU bats −3/post-PHV + off-season only); ≤1 high day/wk
+on on-ramps (2 from wk9 at 17+, ≥72 h apart, never adjacent weekdays); every
+throwing day wrapped warm-up→…→recovery; RFS locked Mon/Wed/Fri + soreness rules
++ physician gate when pain-flagged; Pitch Smart preflight blocks start dates
+while the arm is red; annual-calendar rule embedded in every throwing program.
+`Program.generatorMeta` stamps rulesVersion/inputs/percentiles + the "Why this
+program" line; generated programs stay ordinary editable Programs.
 
 ## 5. `CT.sessionLog` — the shared Log-Session modal (views/session-log.js)
 

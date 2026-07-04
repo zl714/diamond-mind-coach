@@ -49,6 +49,32 @@
   function referralBlock(text) {
     return '<div class="pgm-referral"><i data-lucide="shield-alert"></i><span>' + esc(text) + '</span></div>';
   }
+  function generatedPill() {
+    return '<span class="pill" style="' + ui.toneStyle('accent') + '"><i data-lucide="wand-sparkles"></i>Generated</span>';
+  }
+  const INT_LABEL = { high: 'High', medium: 'Med', low: 'Low', recovery: 'Recovery' };
+  function intChip(intensity) {
+    if (!intensity) return '';
+    return '<span class="int-chip int-' + esc(intensity) + '">' + esc(INT_LABEL[intensity] || intensity) + '</span>';
+  }
+
+  // Header "Generate" — pick the player first, then the wizard takes over.
+  function openGeneratePicker() {
+    const players = store.getPlayers();
+    if (!players.length) { ui.toast('Add players first (Players).'); return; }
+    const rows = players.map(function (p) {
+      const age = model.ageFromBirthdate(p.birthdate);
+      return '<a class="qa-item" href="#/generate/' + esc(p.id) + '">' +
+        '<i data-lucide="user-round"></i>' +
+        '<span class="qa-txt"><span class="qa-name">' + esc(p.name) + '</span>' +
+        '<span class="qa-sub">' + (age != null ? age + ' yrs · ' : '') + esc(model.bandFor(p) || 'no birthdate') + '</span></span></a>';
+    }).join('');
+    ui.openModal('Generate a program — pick a player', '<div class="gen-pick-list">' + rows + '</div>',
+      function (modal, close) {
+        modal.addEventListener('click', function (e) { if (e.target.closest('a')) close(); });
+        try { if (window.lucide) window.lucide.createIcons(); } catch (e) {}
+      });
+  }
 
   // =====================================================================
   // ASSIGN MODAL — players + start date + days-of-week (age-gated)
@@ -143,7 +169,7 @@
       '<a class="pgm-card-link" href="#/programs/' + esc(p.id) + '">' +
         '<div class="pgm-card-top">' +
           '<div class="pgm-card-name">' + esc(p.name) + '</div>' +
-          typePill(p.type) +
+          '<div class="pill-row">' + (p.source === 'generated' ? generatedPill() : '') + typePill(p.type) + '</div>' +
         '</div>' +
         '<div class="pgm-weeks"><span class="num">' + p.weeks + '</span> week' + (p.weeks === 1 ? '' : 's') +
           ' × <span class="num">' + Math.max(1, p.daysPerWeek) + '</span> day' + (p.daysPerWeek === 1 ? '' : 's') + '/wk' +
@@ -339,7 +365,9 @@
         const day = programs.dayFor(p, w, d);
         const items = day && day.items ? day.items : [];
         cells += '<div class="pb-day pgm-day-read' + (own ? '' : ' pgm-day-inherit') + '">' +
-          '<div class="pb-day-head" style="cursor:default;">Day ' + (d + 1) + (own || w === 0 ? '' : ' <span class="pb-sel-tag">wk 1</span>') + '</div>' +
+          '<div class="pb-day-head" style="cursor:default;">Day ' + (d + 1) + (own || w === 0 ? '' : ' <span class="pb-sel-tag">wk 1</span>') +
+            (day && day.intensity ? ' ' + intChip(day.intensity) : '') + '</div>' +
+          (day && day.title ? '<div class="gen-day-title">' + esc(day.title) + '</div>' : '') +
           (items.length ? '<ul class="pgm-items">' + items.map(itemLine).join('') + '</ul>' : '<div class="pb-empty muted">Rest / free</div>') +
         '</div>';
       }
@@ -363,7 +391,7 @@
       '<a class="back-link" href="#/programs"><i data-lucide="chevron-left"></i>All programs</a>' +
       ui.card({
         rawTitle: true,
-        title: esc(program.name) + ' ' + typePill(program.type),
+        title: esc(program.name) + ' ' + (program.source === 'generated' ? generatedPill() + ' ' : '') + typePill(program.type),
         subtitle: program.weeks + ' weeks × ' + Math.max(1, program.daysPerWeek) + ' days/week' +
           (program.ageGateMin != null ? ' · hard age gate ' + program.ageGateMin + '+' : ''),
         actions:
@@ -429,8 +457,12 @@
 
     root.innerHTML =
       ui.pageHead('Programs', subtitle,
+        '<button class="btn" id="pgm-generate" type="button"><i data-lucide="wand-sparkles"></i>Generate for a player</button>' +
         '<a class="btn btn-primary" href="#/programs/new"><i data-lucide="plus"></i>New program</a>') +
       tabbar + '<div id="pgm-body"></div>';
+
+    const genBtn = root.querySelector('#pgm-generate');
+    if (genBtn) genBtn.addEventListener('click', openGeneratePicker);
 
     root.querySelectorAll('[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () {

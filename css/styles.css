@@ -1558,3 +1558,72 @@ a.onboard-step:hover { transform: translateY(-1px); border-color: var(--border);
 /* Throws slot participates in the field-row grid when visible */
 #sl-throws-slot { display: contents; }
 #sl-throws-slot[hidden] { display: none; }
+
+/* ============================================================
+   PROGRAM GENERATOR (#/generate/<playerId>) — goal cards,
+   intensity chips, preview grid, generated-program banner.
+   Composes the existing wizard/mod-card/pb-grid patterns.
+   ============================================================ */
+/* Goal cards are <button>s reusing the .mod-card look. */
+.gen-goal { width: 100%; text-align: left; font: inherit; align-items: flex-start; }
+.gen-goal .mod-icon { margin-top: 2px; }
+.gen-goal-locked { opacity: 0.65; cursor: default; }
+.gen-goal-locked:hover { border-color: var(--border); }
+.gen-goal-locked .mod-icon { background: var(--warn-soft); color: var(--warn); }
+.gen-rec-why { color: var(--accent-700); margin-top: 2px; }
+.gen-sub-btn { margin-top: var(--sp-2); pointer-events: auto; }
+
+/* Per-day intensity chip (High / Med / Low / Recovery). */
+.int-chip {
+  display: inline-flex; align-items: center;
+  border-radius: var(--r-pill); border: 1px solid;
+  padding: 0 7px; font-size: var(--fs-eyebrow); font-weight: var(--fw-semibold);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow); line-height: 18px;
+}
+.int-high { background: var(--seam-soft, #FEF3F2); color: var(--seam, #DC2626); border-color: #FECDCA; }
+.int-medium { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-border); }
+.int-low { background: var(--accent-soft); color: var(--accent-700, #0072A8); border-color: #B3E7FB; }
+.int-recovery { background: rgba(15, 23, 42, 0.05); color: var(--text-secondary); border-color: var(--border); }
+
+/* Step-2 toggles + confirmations. */
+.gen-toggle {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  margin: var(--sp-2) 0; font-size: var(--fs-data); color: var(--text-body);
+}
+.gen-toggle input { width: 18px; height: 18px; min-height: 0; margin-top: 1px; flex: 0 0 auto; }
+
+/* "Why this program" callout (audit line, also stored in generatorMeta). */
+.gen-why {
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  background: var(--accent-wash); border: 1px solid #B3E7FB;
+  border-radius: var(--r-card); padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3); font-size: var(--fs-data); color: var(--text-body);
+}
+.gen-why > i, .gen-why > svg { width: 16px; height: 16px; color: var(--accent-700); flex: 0 0 auto; margin-top: 1px; }
+
+.gen-safety { margin-bottom: var(--sp-3); }
+.gen-safety-row {
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  font-size: var(--fs-data); color: var(--text-body); padding: 2px 0;
+}
+.gen-safety-row > i, .gen-safety-row > svg { width: 14px; height: 14px; color: var(--seam, #DC2626); flex: 0 0 auto; margin-top: 2px; }
+
+/* Preview grid touches (reuses .pb-grid / .pb-day / .pgm-items). */
+.gen-day-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-2); }
+.gen-day-title { font-size: var(--fs-label); font-weight: var(--fw-semibold); color: var(--text-strong); margin: 2px 0 4px; }
+.gen-item-note { display: block; font-size: var(--fs-eyebrow); font-weight: var(--fw-regular); }
+
+/* Builder banner on generated programs. */
+.gen-banner {
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  background: var(--accent-wash); border: 1px solid #B3E7FB;
+  border-radius: var(--r-card); padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3); font-size: var(--fs-data); color: var(--text-body);
+}
+.gen-banner > i, .gen-banner > svg { width: 16px; height: 16px; color: var(--accent-700); flex: 0 0 auto; margin-top: 1px; }
+.gen-banner-why { display: block; margin-top: 2px; font-size: var(--fs-label); }
+
+/* Player picker inside the Programs-hub Generate modal. */
+.gen-pick-list { display: flex; flex-direction: column; }
+.gen-pick-list .qa-item { border-bottom: 1px solid var(--divider); }
+.gen-pick-list .qa-item:last-child { border-bottom: none; }
