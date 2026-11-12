@@ -82,7 +82,14 @@ so `CT.registerView` exists when they run. **Registration order = sidebar order.
 
 Key = **`diamondMind.v3`**, `schemaVersion = 4`. Boots EMPTY; a legacy real
 (non-demo) `coachTracker.v2` blob is migrated once via `CT.migrate` (v2 blob kept
-as rollback). There is **no demo/sample data** anymore.
+as rollback). The real store never holds demo/sample data.
+
+**Demo mode (`?demo=1`, demo.js):** the store switches to a SEPARATE key
+(`diamondMind.demo`, `store.isDemo === true`, no v2 migration) and `CT.demo`
+fills it with a fictional six-player roster (assessments, lessons, games, arm
+workload, check-ins, generated programs). Dates are relative to today and the
+roster is rebuilt when the seed is 3+ days old. `diamondMind.v3` is never read
+or written in demo mode. The empty first-run dashboard links to the demo.
 
 **v3 ⇄ v4 compatibility:** v4 is a strict superset of v3 (adds
 `SessionLog.focus`, `MetricReading.sessionLogId`, `Player.readiness`,

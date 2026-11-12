@@ -15,7 +15,14 @@
   'use strict';
 
   const CT = window.CT;
-  const KEY = 'diamondMind.v3';
+  // Demo mode (?demo=1): the app runs against a SEPARATE localStorage key that
+  // demo.js fills with a fictional sample roster. A coach's real data under
+  // 'diamondMind.v3' is never read or written while the demo is open.
+  const IS_DEMO = (function () {
+    try { return /[?&]demo(=1|=true)?(&|$)/.test(window.location.search || ''); }
+    catch (e) { return false; }
+  })();
+  const KEY = IS_DEMO ? 'diamondMind.demo' : 'diamondMind.v3';
   const SCHEMA_VERSION = 4; // v4 = v3 + lesson focus/inline metrics/readiness/generator fields
   const TRASH_KEY = KEY + '.trash';     // single-slot delete-undo (OUTSIDE state; exports stay clean)
   const TRASH_TTL_MS = 10 * 60 * 1000;  // 10-minute undo window
@@ -139,7 +146,8 @@
       return state;
     }
     // 2) No v3 — migrate a real (non-demo) coachTracker.v2 blob once.
-    if (CT.migrate) {
+    //    (Never in demo mode — the demo must not pull in real legacy data.)
+    if (CT.migrate && !IS_DEMO) {
       const v2 = CT.migrate.readV2();
       if (v2 && !v2.isSample) {
         try {
@@ -423,6 +431,7 @@
     load: load,
     getState: getState,
     subscribe: subscribe,
+    isDemo: IS_DEMO,
     // settings
     getSettings: getSettings,
     updateSettings: updateSettings,

@@ -367,6 +367,8 @@
     // Seed the canonical drill library (insert-if-missing; coach edits and
     // deletions are respected — see drills-seed.js).
     try { if (CT.seeds) CT.seeds.ensure(); } catch (e) { console.warn('Drill seeding failed:', e); }
+    // Demo mode (?demo=1): fill the separate demo store with the sample roster.
+    if (CT.demo && CT.demo.active) { CT.demo.ensure(); CT.demo.mountBanner(); }
     autoCompleteEndedAssignments();
     wireToolbar();
     wireAlertsBell();

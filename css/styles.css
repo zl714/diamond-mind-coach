@@ -1672,3 +1672,26 @@ a.onboard-step:hover { transform: translateY(-1px); border-color: var(--border);
 }
 .lib-search input:focus { outline: 2px solid var(--accent-500); outline-offset: 1px; }
 .lib-jump { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+
+/* ---------- Demo mode (?demo=1) ---------- */
+/* Slim banner above the header: makes it obvious the roster is fictional. */
+.demo-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-2) var(--sp-8);
+  background: var(--accent-700);
+  color: #fff;
+  font-size: var(--fs-data);
+  line-height: 1.4;
+}
+.demo-banner-tag {
+  font-size: var(--fs-eyebrow); font-weight: var(--fw-semibold);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px var(--sp-2); border-radius: var(--r-chip);
+  background: rgba(255, 255, 255, 0.18);
+}
+.demo-banner-text { flex: 1 1 240px; }
+.demo-banner-link { color: #fff; font-weight: var(--fw-semibold); text-decoration: underline; white-space: nowrap; }
+.demo-invite { margin: var(--sp-3) 0 var(--sp-4); color: var(--text-secondary); font-size: var(--fs-sm); }
+@media (max-width: 767px) {
+  .demo-banner { padding: var(--sp-2) var(--sp-4); }
+}

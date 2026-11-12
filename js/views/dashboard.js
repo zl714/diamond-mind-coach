@@ -331,6 +331,10 @@
         '</div></div>' +
         (hasPlayers ? '' : '<a class="btn btn-sm dash-hero-cta" href="#/players"><i data-lucide="user-plus"></i>Add a player</a>') +
       '</div>' +
+      // First visit with no data: offer the sample roster (separate demo store).
+      ((!hasPlayers && CT.demo && !CT.demo.active)
+        ? '<p class="demo-invite">Just looking around? <a href="' + esc(CT.demo.demoUrl()) + '">Explore the demo with a sample roster</a>.</p>'
+        : '') +
       '<div class="onboard-steps">' +
         onboardStep(1, hasPlayers, false, '#/players', 'Add a player',
           'Name, birthdate, and positions — age bands drive benchmarks and Pitch Smart limits.') +

@@ -4,6 +4,8 @@ A baseball player-development tracker — roster, drills, assessments, games, se
 
 **Live app:** [diamond-mind-coach.vercel.app](https://diamond-mind-coach.vercel.app)
 
+**Demo with a sample roster:** [diamond-mind-coach.vercel.app/?demo=1](https://diamond-mind-coach.vercel.app/?demo=1) — fictional players, stored separately from any real data.
+
 ![Diamond Mind dashboard](docs/screenshot-dashboard.png)
 
 ## The honest story
